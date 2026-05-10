@@ -27,13 +27,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build frontend only (avoid server bundling)
+        run: |
+          cd client
+          npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: client/dist/public
+          path: client/dist
+
 
   deploy:
     runs-on: ubuntu-latest
