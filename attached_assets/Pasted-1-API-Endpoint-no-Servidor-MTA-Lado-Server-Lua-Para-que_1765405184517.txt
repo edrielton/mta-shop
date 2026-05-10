@@ -1,0 +1,175 @@
+1. API / Endpoint no Servidor MTA (Lado Server Lua)
+
+Para que o site consiga acionar funções dentro do servidor, o servidor MTA precisa expor endpoints seguros.
+Isso exige:
+
+a) HTTP Server ativo no MTA
+
+No mtaserver.conf:
+
+<httpserver>1</httpserver>
+
+<httpport>22005</httpport> (ou outro)
+
+b) Recursos (resources) com HTTP HANDLER
+
+Um resource capaz de:
+
+Receber requisições HTTP (GET/POST)
+
+Interpretar parâmetros enviados pelo site (ex.: serial, item, token)
+
+Executar a função no servidor (dar item, ativar VIP, liberar skin, moeda, etc.)
+
+Responder ao site com JSON (status, mensagens de erro)
+
+c) Autenticação obrigatória entre site e MTA
+
+Evitar ataques. Necessário:
+
+Token secreto
+
+IP whitelisting
+
+Hash das requisições (HMAC SHA256)
+
+2. Banco de Dados (MySQL ou MariaDB)
+
+O site e o servidor precisam compartilhar informações.
+
+Você precisa de tabelas para:
+
+Usuários / contas
+
+Vendas / produtos
+
+Logs de ativações
+
+Histórico de compras
+
+Integração com serial / account do MTA
+
+Sistema de VIP, coins, créditos, ativações
+
+O site envia ao servidor somente quando a compra estiver confirmada.
+
+3. Sistema de Autenticação do Site
+
+O site precisa permitir que o jogador:
+
+Faça login
+
+Se identifique com Serial MTA ou Account MTA
+
+Veja seu perfil (VIP, moedas, histórico)
+
+Opções:
+
+Login por email
+
+Login por serial MTA
+
+Login por token gerado pelo servidor
+
+4. Gerenciador de Produtos
+
+O site precisa ter um painel onde você/ADM pode configurar:
+
+Nome do produto
+
+Descrição
+
+Preço (Pix, cartão, criptomoedas)
+
+SKU (identificação interna)
+
+Script correspondente no servidor (ex.: “giveVip30d”, “giveCarID32”, “addCoins500”)
+
+5. Sistema de Pagamentos
+
+Essencial para ativar automaticamente.
+
+Opções:
+
+API Pix automático (Mercado Pago, PagBank, Asaas, Gerencianet)
+
+Cartão de crédito (Pagar.me, Stripe, etc.)
+
+Pagamentos instantâneos via webhook
+
+Após pagamento confirmado, o site chama o endpoint do servidor MTA.
+
+6. Webhook de Confirmação
+
+Quando o pagamento for concluído, o sistema de pagamento envia um webhook ao site, que faz:
+
+Confirmar transação
+
+Registrar no banco
+
+Enviar comando ao servidor MTA via API
+
+Registrar log
+
+Sem webhook, não existe automação real.
+
+7. Painel Administrativo Completo
+
+O painel deve permitir:
+
+Ver ativação e logs do servidor
+
+Criar e editar produtos
+
+Banir usuários
+
+Gerenciar chaves e tokens de API
+
+Reenviar ativação ao MTA
+
+Visualizar falhas de comunicação site → servidor
+
+8. Sistema de Segurança
+
+Para evitar ataques, clones e spam:
+
+CAPTCHA no login
+
+Rate limit nas rotas
+
+Token único para comunicações site → MTA
+
+Criptografia HTTPS
+
+Campos validados sempre
+
+Logs detalhados
+
+9. Sistema de Logs
+
+Obrigatório:
+
+Log de entrada do site
+
+Log de compra
+
+Log de webhook
+
+Log de ativação no MTA
+
+Log de falha de conexão
+
+Log de tentativas suspeitas
+
+Sem logs, você não sabe o que deu errado.
+
+10. Integração Final – Fluxo Completo
+
+O fluxo de ativação funciona assim:
+
+Usuário compra no site
+→ Pagamento envia Webhook ao site
+→ Site confirma e envia requisição HTTP para o MTA
+→ Resource MTA recebe → executa ação (VIP, item, coins)
+→ MTA responde ao site (OK)
+→ Site registra no banco e mostra ao jogador
