@@ -766,39 +766,51 @@ export default function AdminPage() {
 
 // ── ResourcesTab ────────────────────────────────────────────────────────────
 
+interface DetectedItem {
+  resourceName:   string;
+  suggestedName:  string;
+  suggestedDesc:  string;
+  category:       string;
+  mtaCommand:     string;
+  mtaParams:      Record<string, any>;
+  autoDetected:   boolean;
+  detectionSource: string;
+}
+
 interface MtaResource {
-  name: string;
-  state: "running" | "loaded" | "starting" | "stopping" | "failed";
+  name:       string;
+  state:      string;
   description: string;
-  author: string;
-  version: string;
-  type: string;
+  author:     string;
+  version:    string;
+  type:       string;
+  classified: string | null;
+  sellable:   DetectedItem[];
 }
 
 interface ScanResult {
-  success: boolean;
-  total: number;
-  running: number;
-  scannedAt: number;
-  resources: MtaResource[];
+  success:       boolean;
+  total:         number;
+  running:       number;
+  detectedItems: number;
+  scannedAt:     number;
+  resources:     MtaResource[];
+  detected:      DetectedItem[];
 }
 
 function ResourcesTab() {
-  const { toast } = useToast();
-  const [scanData, setScanData] = useState<ScanResult | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filterState, setFilterState] = useState<string>("all");
-  const [syncTarget, setSyncTarget] = useState<MtaResource | null>(null);
-  const [syncForm, setSyncForm] = useState({
-    productName: "",
-    description: "",
-    price: "",
-    category: "item",
-    mtaCommand: "",
-    mtaParams: "{}",
-  });
-  const [syncing, setSyncing] = useState(false);
+  const { toast }                     = useToast();
+  const queryClient                   = useQueryClient();
+  const [scanData,    setScanData]    = useState<ScanResult | null>(null);
+  const [scanning,    setScanning]    = useState(false);
+  const [autoSyncing, setAutoSyncing] = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [activeTab,   setActiveTab]   = useState<"detected" | "all">("detected");
+
+  // Itens detectados com preço/nome editável antes de criar
+  const [pendingItems, setPendingItems] = useState<
+    (DetectedItem & { editName: string; editPrice: string })[]
+  >([]);
 
   async function runScan() {
     setScanning(true);
@@ -808,9 +820,22 @@ function ResourcesTab() {
         const err = await res.json();
         throw new Error(err.message || "Falha ao escanear");
       }
-      const data = await res.json();
+      const data: ScanResult = await res.json();
       setScanData(data);
-      toast({ title: `Scan concluído`, description: `${data.total} resources encontrados, ${data.running} rodando.` });
+
+      // Pré-preenche itens para edição
+      setPendingItems(
+        (data.detected || []).map((item) => ({
+          ...item,
+          editName:  item.suggestedName,
+          editPrice: "",
+        }))
+      );
+
+      toast({
+        title: `Scan concluído`,
+        description: `${data.detectedItems} item(ns) detectado(s) automaticamente em ${data.total} resources.`,
+      });
     } catch (e: any) {
       toast({ title: "Erro no scan", description: e.message, variant: "destructive" });
     } finally {
@@ -818,51 +843,73 @@ function ResourcesTab() {
     }
   }
 
-  async function handleSync() {
-    if (!syncTarget) return;
-    setSyncing(true);
+  async function autoSync() {
+    setAutoSyncing(true);
     try {
-      let params = {};
-      try { params = JSON.parse(syncForm.mtaParams); } catch { params = {}; }
+      const res = await fetch("/api/admin/mta-auto-sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
 
-      const res = await fetch("/api/admin/mta-sync", {
+      toast({ title: "Auto-sync concluído!", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setAutoSyncing(false);
+    }
+  }
+
+  async function createSingleProduct(item: DetectedItem & { editName: string; editPrice: string }) {
+    if (!item.editPrice || parseFloat(item.editPrice) <= 0) {
+      toast({ title: "Defina o preço antes de criar", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const sku = `AUTO-${item.resourceName}-${item.mtaCommand}-${Date.now()}`;
+      const res = await fetch("/api/admin/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resourceName: syncTarget.name,
-          productName: syncForm.productName,
-          description: syncForm.description,
-          price: parseFloat(syncForm.price),
-          category: syncForm.category,
-          mtaCommand: syncForm.mtaCommand,
-          mtaParams: params,
+          name:        item.editName,
+          description: item.suggestedDesc,
+          sku,
+          price:       item.editPrice,
+          currency:    "BRL",
+          category:    item.category,
+          mtaCommand:  item.mtaCommand,
+          mtaParams:   item.mtaParams,
+          isActive:    false,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      toast({ title: "Sincronizado!", description: data.message });
-      setSyncTarget(null);
-      setSyncForm({ productName: "", description: "", price: "", category: "item", mtaCommand: "", mtaParams: "{}" });
+
+      toast({ title: "Produto criado!", description: `"${item.editName}" adicionado à loja (inativo).` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+
+      // Remove da lista de pendentes
+      setPendingItems((prev) => prev.filter((p) => p !== item));
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
-    } finally {
-      setSyncing(false);
     }
   }
 
-  const filtered = (scanData?.resources || []).filter((r) => {
-    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.description.toLowerCase().includes(search.toLowerCase());
-    const matchState = filterState === "all" || r.state === filterState;
-    return matchSearch && matchState;
-  });
+  function categoryColor(cat: string) {
+    switch (cat) {
+      case "vip":     return "text-amber-500 bg-amber-500/10 border-amber-500/20";
+      case "vehicle": return "text-blue-500 bg-blue-500/10 border-blue-500/20";
+      case "coins":   return "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
+      default:        return "text-purple-500 bg-purple-500/10 border-purple-500/20";
+    }
+  }
 
   function stateColor(state: string) {
     switch (state) {
-      case "running":  return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "loaded":   return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "failed":   return "bg-red-500/10 text-red-500 border-red-500/20";
-      default:         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+      case "running": return "text-green-500 bg-green-500/10 border-green-500/20";
+      case "loaded":  return "text-blue-500 bg-blue-500/10 border-blue-500/20";
+      case "failed":  return "text-red-500 bg-red-500/10 border-red-500/20";
+      default:        return "text-yellow-500 bg-yellow-500/10 border-yellow-500/20";
     }
   }
 

@@ -216,3 +216,60 @@ VALUES
  'KIT-PREMIUM', 34.90, 'BRL', 'item', 'giveWeaponKit', '{"kit": "premium"}', TRUE)
 
 ON CONFLICT ("sku") DO NOTHING;
+
+-- ============================================================
+-- 7. PLAYER_TOKENS (tokens de auto-login gerados pelo MTA)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "player_tokens" (
+    "id"         UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
+    "serial"     TEXT       NOT NULL,
+    "token"      TEXT       NOT NULL UNIQUE,
+    "used"       BOOLEAN    NOT NULL DEFAULT FALSE,
+    "expires_at" TIMESTAMP  NOT NULL,
+    "created_at" TIMESTAMP  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "idx_player_tokens_token"  ON "player_tokens" ("token");
+CREATE INDEX IF NOT EXISTS "idx_player_tokens_serial" ON "player_tokens" ("serial");
+
+-- ============================================================
+-- 8. PLAYER_DATA (dados sincronizados do servidor RP)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "player_data" (
+    "serial"       TEXT    PRIMARY KEY,
+    "online"       BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- Personagem
+    "nome"         TEXT,
+    "idade"        INTEGER DEFAULT 0,
+    "sexo"         TEXT    DEFAULT 'M',
+    "skin"         INTEGER DEFAULT 0,
+    "horas_jogadas" INTEGER DEFAULT 0,
+
+    -- Economia
+    "dinheiro"     BIGINT  DEFAULT 0,
+    "banco"        BIGINT  DEFAULT 0,
+
+    -- RP
+    "faccao"       TEXT    DEFAULT 'Nenhuma',
+    "cargo"        TEXT    DEFAULT 'Membro',
+    "emprego"      TEXT    DEFAULT 'Desempregado',
+    "nivel"        INTEGER DEFAULT 1,
+    "xp"           INTEGER DEFAULT 0,
+
+    -- Status
+    "vida"         INTEGER DEFAULT 100,
+    "colete"       INTEGER DEFAULT 0,
+
+    -- Documentos
+    "cnh"          BOOLEAN DEFAULT FALSE,
+    "rg"           BOOLEAN DEFAULT FALSE,
+    "porte_arma"   BOOLEAN DEFAULT FALSE,
+
+    -- Listas (JSON)
+    "veiculos"     JSONB   DEFAULT '[]',
+    "inventario"   JSONB   DEFAULT '[]',
+    "propriedades" JSONB   DEFAULT '[]',
+
+    "updated_at"   TIMESTAMP NOT NULL DEFAULT NOW()
+);

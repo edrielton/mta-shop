@@ -2,24 +2,31 @@
 <meta>
     <info
         author="MTA Store"
-        version="1.2.0"
-        description="MTA Store - Ativação automática de itens comprados no site"
+        version="1.3.0"
+        description="MTA Store - Loja online integrada com sync de dados RP"
         type="misc"
     />
 
-    <!-- Configuração (carregada primeiro) -->
-    <script src="config.lua"   type="server" cache="false"/>
+    <!-- 1. Configuração (carregada primeiro) -->
+    <script src="config.lua"     type="server" cache="false"/>
 
-    <!-- Lógica principal -->
-    <script src="server.lua"   type="server" cache="false"/>
+    <!-- 2. Lógica principal (ativações, fila offline, retry) -->
+    <script src="server.lua"     type="server" cache="false"/>
 
-    <!-- Endpoint: POST /mta_store/activate  (ativar item comprado) -->
-    <!-- Endpoint: GET  /mta_store/health    (health check)         -->
-    <html src="activate.lua" default="false" raw="false"/>
+    <!-- 3. Sync de dados dos jogadores com o site -->
+    <script src="sync.lua"       type="server" cache="false"/>
 
-    <!-- Endpoint: GET  /mta_store/scan      (escanear resources)   -->
-    <html src="scanner.lua"  default="false" raw="false"/>
+    <!-- Endpoints HTTP -->
+    <!-- POST /mta_store/activate  → ativar item comprado       -->
+    <!-- GET  /mta_store/health    → health check               -->
+    <html src="activate.lua"  default="false" raw="false"/>
 
-    <!-- Fila offline -->
+    <!-- GET  /mta_store/scan      → listar resources           -->
+    <html src="scanner.lua"   default="false" raw="false"/>
+
+    <!-- GET  /mta_store/autotoken → validar token auto-login   -->
+    <html src="autotoken.lua" default="false" raw="false"/>
+
+    <!-- Fila de ativações offline -->
     <file src="queue.json"/>
 </meta>

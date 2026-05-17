@@ -447,3 +447,249 @@ end)
 addEventHandler("onResourceStop", resourceRoot, function()
     outputServerLog("[MTA-Store] Resource parado. Fila preservada em " .. QUEUE_FILE)
 end)
+
+-- ======================================================================
+-- COMANDO: /storesync — escaneia todos os mods e envia pro site
+-- Pode ser usado por admins no chat ou no console do servidor
+-- ======================================================================
+
+local function runSync(player)
+    local isConsole = (player == nil)
+    local name      = isConsole and "Console" or getPlayerName(player)
+
+    -- Só admin pode usar (no chat)
+    if not isConsole and not isPlayerAdmin(player) then
+        outputChatBox("#FF4444[MTA Store] #FFFFFFVocê não tem permissão para usar este comando.", player, 255, 255, 255, true)
+        return
+    end
+
+    local msg = "[MTA-Store] Sincronizando mods com o site... (solicitado por " .. name .. ")"
+    outputServerLog(msg)
+    if not isConsole then
+        outputChatBox("#00FF7F[MTA Store] #FFFFFFEscaneando todos os mods, aguarde...", player, 255, 255, 255, true)
+    end
+
+    -- Coleta todos os resources
+    local resources = {}
+    local detected  = {}
+
+    for _, resource in ipairs(getResources()) do
+        local rName  = getResourceName(resource)
+        local rState = getResourceState(resource)
+        local rDesc  = getResourceInfo(resource, "description") or ""
+        local rType  = getResourceInfo(resource, "type") or "misc"
+
+        local item = {
+            name        = rName,
+            state       = rState,
+            description = rDesc,
+            type        = rType,
+            sellable    = {},
+        }
+
+        -- Detecta sistemas vendáveis (rodando apenas)
+        if rState == "running" then
+            local lName = rName:lower()
+            local lDesc = rDesc:lower()
+
+            -- VIP
+            if lName:find("vip") or lDesc:find("vip") or lName:find("rank") or lName:find("premium") or lName:find("doador") then
+                item.classified = "vip"
+
+                -- Tenta pegar tiers exportados
+                local tierFns = {"getVipTiers","getPlanos","getVipLevels","getTiers","getNiveis","getVipPlans","getVipList"}
+                local foundTiers = false
+
+                for _, fn in ipairs(tierFns) do
+                    local ok, result = pcall(function() return exports[rName][fn]() end)
+                    if ok and type(result) == "table" then
+                        for k, v in pairs(result) do
+                            local tName = type(v) == "table" and (v.name or v.nome or v.label or tostring(k)) or tostring(v)
+                            local tId   = type(v) == "table" and (v.id or v.nivel or k) or k
+                            table.insert(item.sellable, {
+                                suggestedName   = tName,
+                                suggestedDesc   = tName .. " — acesso especial no servidor.",
+                                category        = "vip",
+                                mtaCommand      = "giveVip",
+                                mtaParams       = { tier = tostring(tId), days = 30, resource = rName },
+                                autoDetected    = true,
+                            })
+                            foundTiers = true
+                        end
+                        if foundTiers then break end
+                    end
+                end
+
+                -- Detecta por keywords no nome
+                if not foundTiers then
+                    local keywords = {
+                        {p="gold",    n="VIP Gold"},    {p="ouro",    n="VIP Ouro"},
+                        {p="prata",   n="VIP Prata"},   {p="silver",  n="VIP Silver"},
+                        {p="bronze",  n="VIP Bronze"},  {p="diamond", n="VIP Diamond"},
+                        {p="diamante",n="VIP Diamante"},{p="platina", n="VIP Platina"},
+                        {p="vip1",    n="VIP Nível 1"}, {p="vip2",    n="VIP Nível 2"},
+                        {p="vip3",    n="VIP Nível 3"},
+                    }
+                    for _, kw in ipairs(keywords) do
+                        if lName:find(kw.p) then
+                            table.insert(item.sellable, {
+                                suggestedName  = kw.n,
+                                suggestedDesc  = kw.n .. " — acesso especial no servidor.",
+                                category       = "vip",
+                                mtaCommand     = "giveVip",
+                                mtaParams      = { tier = kw.p, days = 30, resource = rName },
+                                autoDetected   = true,
+                            })
+                        end
+                    end
+                end
+
+                -- Fallback: VIP genérico
+                if #item.sellable == 0 then
+                    table.insert(item.sellable, {
+                        suggestedName  = "VIP — " .. rName,
+                        suggestedDesc  = "Acesso VIP do servidor.",
+                        category       = "vip",
+                        mtaCommand     = "giveVip",
+                        mtaParams      = { resource = rName, days = 30 },
+                        autoDetected   = false,
+                    })
+                end
+
+            -- VEÍCULOS
+            elseif lName:find("vehicle") or lName:find("veiculo") or lName:find("carro") or lName:find("garage") then
+                item.classified = "vehicle"
+                local vFns = {"getVehicleList","getVeiculos","getCars","getVehicles","getCarros"}
+                local found = false
+                for _, fn in ipairs(vFns) do
+                    local ok, result = pcall(function() return exports[rName][fn]() end)
+                    if ok and type(result) == "table" then
+                        for _, v in ipairs(result) do
+                            table.insert(item.sellable, {
+                                suggestedName  = v.name or v.nome or ("Veículo " .. tostring(v.model or "")),
+                                suggestedDesc  = "Entregue no seu spawn.",
+                                category       = "vehicle",
+                                mtaCommand     = "giveVehicle",
+                                mtaParams      = { vehicleId = v.model or v.modelo, resource = rName },
+                                autoDetected   = true,
+                            })
+                        end
+                        found = true; break
+                    end
+                end
+                if not found then
+                    table.insert(item.sellable, {
+                        suggestedName  = "Veículo — " .. rName,
+                        suggestedDesc  = "Veículo exclusivo do servidor.",
+                        category       = "vehicle",
+                        mtaCommand     = "giveVehicle",
+                        mtaParams      = { resource = rName },
+                        autoDetected   = false,
+                    })
+                end
+
+            -- MOEDAS
+            elseif lName:find("coin") or lName:find("moeda") or lName:find("economy") or lName:find("economia") then
+                item.classified = "coins"
+                for _, amount in ipairs({1000, 5000, 15000}) do
+                    table.insert(item.sellable, {
+                        suggestedName  = amount .. " Moedas",
+                        suggestedDesc  = "Pacote de " .. amount .. " moedas.",
+                        category       = "coins",
+                        mtaCommand     = "giveCoins",
+                        mtaParams      = { amount = amount, resource = rName },
+                        autoDetected   = false,
+                    })
+                end
+
+            -- ARMAS
+            elseif lName:find("weapon") or lName:find("arma") or lName:find("kit") then
+                item.classified = "weapon"
+                for _, kit in ipairs({"starter","premium"}) do
+                    table.insert(item.sellable, {
+                        suggestedName  = "Kit " .. kit:sub(1,1):upper() .. kit:sub(2),
+                        suggestedDesc  = "Kit de armas " .. kit .. ".",
+                        category       = "item",
+                        mtaCommand     = "giveWeaponKit",
+                        mtaParams      = { kit = kit, resource = rName },
+                        autoDetected   = false,
+                    })
+                end
+            end
+
+            -- Adiciona itens detectados na lista global
+            for _, s in ipairs(item.sellable) do
+                s.resourceName = rName
+                table.insert(detected, s)
+            end
+        end
+
+        table.insert(resources, item)
+    end
+
+    -- Envia para o site
+    local payload = {
+        source    = "command",
+        trigger   = name,
+        total     = #resources,
+        detected  = detected,
+        resources = resources,
+        scannedAt = os.time(),
+    }
+
+    local url  = MTA_STORE_SITE_URL .. "/api/admin/mta-command-sync"
+    local body = toJSON(payload)
+
+    fetchRemote(url, {
+        method         = "POST",
+        postData       = body,
+        headers        = {
+            ["Content-Type"] = "application/json",
+            ["X-API-Token"]  = MTA_STORE_TOKEN,
+        },
+        connectTimeout = 15000,
+        readTimeout    = 15000,
+    }, function(response, errno)
+        if errno ~= 0 then
+            outputServerLog("[MTA-Store] Erro ao enviar sync (errno: " .. errno .. ")")
+            if not isConsole then
+                outputChatBox("#FF4444[MTA Store] #FFFFFFErro ao conectar com o site.", player, 255, 255, 255, true)
+            end
+            return
+        end
+
+        local data = fromJSON(response)
+        local created = data and data.created or 0
+        local skipped = data and data.skipped or 0
+        local total   = data and data.total   or #detected
+
+        local resultMsg = string.format(
+            "[MTA-Store] Sync concluído! %d mods escaneados, %d item(ns) detectado(s), %d produto(s) criado(s), %d já existiam.",
+            #resources, total, created, skipped
+        )
+
+        outputServerLog(resultMsg)
+
+        if not isConsole then
+            outputChatBox(
+                string.format(
+                    "#00FF7F[MTA Store] #FFFFFFSync concluído! #00BFFF%d #FFFFFFitem(ns) detectado(s), #00BFFF%d #FFFFFFproduto(s) criado(s) na loja.",
+                    total, created
+                ),
+                player, 255, 255, 255, true
+            )
+        end
+    end)
+end
+
+-- Comando no chat (admin)
+addCommandHandler("storesync", function(player)
+    runSync(player)
+end)
+
+-- Comando no console do servidor
+addCommandHandler("storesync", function(player)
+    if not player then runSync(nil) end
+end, false, false)
+
+outputServerLog("[MTA-Store] Comando disponível: storesync (chat: /storesync | console: storesync)")

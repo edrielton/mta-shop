@@ -9,6 +9,8 @@ import session from "express-session";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import crypto from "crypto";
+import { broadcastPlayerData, broadcastAdmin } from "./websocket";
+import { adminIpGuard, logAdminAccess } from "./adminGuard";
 import { hashSessionToken, parseDeviceName, detectSuspiciousActivity } from "./security";
 
 declare module "express-session" {
@@ -174,6 +176,9 @@ async function processCompletedPayment(stripeSessionId: string, paymentIntentId:
     });
   }
 }
+
+// Re-export broadcast for use in routes
+export { broadcastAdmin } from "./websocket";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.use(
@@ -699,6 +704,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ============ ADMIN ROUTES ============
 
+  // ── Proteção de IP para todas as rotas admin ─────────────────────────
+  app.use(["/admin", "/api/admin"], adminIpGuard, logAdminAccess);
+
   app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     try {
       res.json(await storage.getAdminStats());
@@ -952,6 +960,137 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
 
 
+
+
+  // Recebe sync disparado pelo comando /storesync no MTA
+  app.post("/api/admin/mta-command-sync", async (req, res) => {
+    try {
+      const apiToken = req.headers["x-api-token"];
+      const settings = await storage.getMtaSettings();
+
+      if (!settings || apiToken !== settings.apiToken) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+      }
+
+      const { detected = [], resources = [], trigger, scannedAt } = req.body;
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const item of detected) {
+        const sku = `AUTO-${item.resourceName}-${item.mtaCommand}-${JSON.stringify(item.mtaParams || {}).slice(0, 20)}`
+          .replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 80);
+
+        const existing = await storage.getProductBySku(sku);
+        if (existing) { skipped++; continue; }
+
+        await storage.createProduct({
+          name:        item.suggestedName,
+          description: item.suggestedDesc || "",
+          sku,
+          price:       "0.00",
+          currency:    "BRL",
+          category:    item.category || "item",
+          mtaCommand:  item.mtaCommand,
+          mtaParams:   item.mtaParams || {},
+          isActive:    false,
+        });
+        created++;
+      }
+
+      await storage.createLog({
+        type:    "admin",
+        level:   "info",
+        message: `Sync via comando MTA por "${trigger}": ${resources.length} mods, ${detected.length} detectados, ${created} criados, ${skipped} existiam.`,
+      });
+
+      // Notifica admins online via WebSocket
+      broadcastAdmin("command_sync", {
+        trigger,
+        scannedAt,
+        total:   detected.length,
+        created,
+        skipped,
+        message: `Sync concluído por ${trigger}: ${created} produto(s) criado(s).`,
+      });
+
+      res.json({ success: true, total: detected.length, created, skipped });
+    } catch (error) {
+      console.error("Command sync error:", error);
+      res.status(500).json({ success: false, error: "Internal error" });
+    }
+  });
+
+  // Auto-cria produtos a partir dos itens detectados pelo scanner
+  app.post("/api/admin/mta-auto-sync", requireAdmin, async (req, res) => {
+    try {
+      const settings = await storage.getMtaSettings();
+      if (!settings || !settings.isActive) {
+        return res.status(400).json({ message: "Servidor MTA não configurado." });
+      }
+
+      // Busca scan fresh do servidor
+      const scanUrl = `${settings.serverUrl}:${settings.serverPort}/mta_store/scan`;
+      const response = await fetch(scanUrl, {
+        method: "GET",
+        headers: { "X-API-Token": settings.apiToken },
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (!response.ok) {
+        return res.status(502).json({ message: "Erro ao buscar scan do MTA." });
+      }
+
+      const scanData = await response.json();
+      const detected: any[] = scanData.detected || [];
+
+      if (detected.length === 0) {
+        return res.json({ created: 0, skipped: 0, message: "Nenhum item detectado automaticamente." });
+      }
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const item of detected) {
+        // Verifica se produto com mesmo comando+params já existe
+        const sku = `AUTO-${item.resourceName}-${item.mtaCommand}-${JSON.stringify(item.mtaParams || {}).slice(0, 20)}`.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 80);
+
+        const existing = await storage.getProductBySku(sku);
+        if (existing) { skipped++; continue; }
+
+        await storage.createProduct({
+          name:        item.suggestedName,
+          description: item.suggestedDesc,
+          sku,
+          price:       "0.00",   // admin define o preço
+          currency:    "BRL",
+          category:    item.category || "item",
+          mtaCommand:  item.mtaCommand,
+          mtaParams:   item.mtaParams || {},
+          isActive:    false,    // começa inativo até admin ativar
+        });
+
+        created++;
+      }
+
+      await storage.createLog({
+        type: "admin",
+        level: "info",
+        message: `Auto-sync: ${created} produto(s) criado(s), ${skipped} já existiam.`,
+      });
+
+      res.json({
+        created,
+        skipped,
+        total: detected.length,
+        message: `${created} produto(s) criado(s) automaticamente! Configure o preço e ative-os no painel de Produtos.`,
+      });
+    } catch (error) {
+      console.error("Auto-sync error:", error);
+      res.status(500).json({ message: "Falha no auto-sync." });
+    }
+  });
+
   // ── SCAN DE RESOURCES DO SERVIDOR MTA ──────────────────────────────
   // Escaneia todos os resources instalados e retorna para o painel admin
   app.get("/api/admin/mta-scan", requireAdmin, async (_req, res) => {
@@ -1019,6 +1158,153 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ product, message: "Produto criado! Ative-o no painel de produtos quando estiver pronto." });
     } catch (error) {
       res.status(500).json({ message: "Falha ao sincronizar resource." });
+    }
+  });
+
+
+  // ══════════════════════════════════════════════════════════════════
+  // PLAYER SYNC — recebe dados do servidor MTA e auto-login
+  // ══════════════════════════════════════════════════════════════════
+
+  // MTA envia token de auto-login gerado no servidor
+  app.post("/api/player/token", async (req, res) => {
+    try {
+      const { serial, token, expiresIn } = req.body;
+      const apiToken = req.headers["x-api-token"];
+
+      const settings = await storage.getMtaSettings();
+      if (!settings || apiToken !== settings.apiToken) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+      }
+
+      if (!serial || !token) {
+        return res.status(400).json({ success: false, error: "serial e token obrigatórios" });
+      }
+
+      const expiresAt = new Date(Date.now() + (expiresIn || 300) * 1000);
+
+      await storage.upsertPlayerToken({ serial, token, expiresAt });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Player token error:", error);
+      res.status(500).json({ success: false, error: "Internal error" });
+    }
+  });
+
+  // MTA sincroniza dados do jogador
+  app.post("/api/player/sync", async (req, res) => {
+    try {
+      const apiToken = req.headers["x-api-token"];
+
+      const settings = await storage.getMtaSettings();
+      if (!settings || apiToken !== settings.apiToken) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+      }
+
+      const { serial, online, ...playerData } = req.body;
+      if (!serial) {
+        return res.status(400).json({ success: false, error: "serial obrigatório" });
+      }
+
+      await storage.upsertPlayerData({ serial, online: online ?? false, ...playerData });
+
+      // Transmite em tempo real para o dashboard do jogador
+      broadcastPlayerData(serial, { serial, online: online ?? false, ...playerData });
+
+      // Transmite para admins online
+      if (online === false) {
+        broadcastAdmin("player_offline", { serial });
+      } else {
+        broadcastAdmin("player_online", { serial });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Player sync error:", error);
+      res.status(500).json({ success: false, error: "Internal error" });
+    }
+  });
+
+  // Site valida token e faz auto-login
+  app.post("/api/player/auto-login", rateLimit(10, 60 * 1000), async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ message: "Token obrigatório" });
+
+      const playerToken = await storage.getPlayerToken(token);
+
+      if (!playerToken) {
+        return res.status(401).json({ message: "Token inválido ou expirado" });
+      }
+
+      if (playerToken.used) {
+        return res.status(401).json({ message: "Token já utilizado" });
+      }
+
+      if (new Date(playerToken.expiresAt) < new Date()) {
+        return res.status(401).json({ message: "Token expirado. Digite /loja no servidor para gerar um novo." });
+      }
+
+      // Marca token como usado
+      await storage.markPlayerTokenUsed(token);
+
+      // Busca ou cria o usuário vinculado ao serial
+      let user = await storage.getUserByMtaSerial(playerToken.serial);
+
+      if (!user) {
+        // Cria conta automaticamente pelo serial
+        const playerData = await storage.getPlayerData(playerToken.serial);
+        const username = playerData?.nome
+          ? playerData.nome.replace(/\s+/g, "").toLowerCase().slice(0, 20) + Math.floor(Math.random() * 999)
+          : "jogador" + Math.floor(Math.random() * 99999);
+
+        user = await storage.createUser({
+          username,
+          email: `${username}@mtastore.local`,
+          password: Math.random().toString(36),
+          mtaSerial: playerToken.serial,
+        });
+      }
+
+      // Faz login
+      req.session.userId = user.id;
+
+      const { password: _, ...safeUser } = user;
+
+      await storage.createLog({
+        type: "auth",
+        level: "info",
+        message: `Auto-login via MTA serial: ${user.username}`,
+        userId: user.id,
+        ipAddress: req.ip,
+      });
+
+      res.json({ success: true, user: safeUser });
+    } catch (error) {
+      console.error("Auto-login error:", error);
+      res.status(500).json({ message: "Erro no auto-login" });
+    }
+  });
+
+  // Retorna dados do jogador (público pelo serial, ou do usuário logado)
+  app.get("/api/player/data/:serial?", async (req, res) => {
+    try {
+      const serial = req.params.serial || (
+        req.session.userId
+          ? (await storage.getUser(req.session.userId))?.mtaSerial
+          : null
+      );
+
+      if (!serial) return res.status(400).json({ message: "Serial não encontrado" });
+
+      const data = await storage.getPlayerData(serial);
+      if (!data) return res.status(404).json({ message: "Jogador não encontrado" });
+
+      res.json({ player: data });
+    } catch (error) {
+      console.error("Player data error:", error);
+      res.status(500).json({ message: "Erro ao buscar dados" });
     }
   });
 

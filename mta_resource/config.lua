@@ -1,32 +1,35 @@
 --[[
-    MTA STORE - config.lua
+    MTA STORE - config.lua v1.3
     =====================================================================
-    Configure este arquivo com o mesmo token definido no painel admin
-    do site (Admin > Configurações MTA).
-    
-    IMPORTANTE: Este token deve ser idêntico ao "API Token" configurado
-    no painel administrativo do site.
+    Configure este arquivo antes de iniciar o resource.
     =====================================================================
 --]]
 
--- Token de autenticação (deve ser igual ao configurado no painel admin do site)
-MTA_STORE_TOKEN = "change-this-token-in-production"
+-- ── Autenticação ───────────────────────────────────────────────────────
+-- Token secreto: deve ser IGUAL ao configurado no painel admin do site
+MTA_STORE_TOKEN = "coloque-seu-token-secreto-aqui"
 
--- Verificação de assinatura HMAC (recomendado: true)
--- Se true, verifica a assinatura criptográfica de cada requisição
+-- ── URL do seu site ────────────────────────────────────────────────────
+-- SEM barra no final!
+-- Exemplo: "https://meuservidor.com.br" ou "https://meuservidor.railway.app"
+MTA_STORE_SITE_URL = "https://seusite.com"
+
+-- ── Verificação HMAC ──────────────────────────────────────────────────
+-- Recomendado: true (segurança extra nas requisições)
 MTA_STORE_REQUIRE_HMAC = true
 
--- Modo debug (false em produção)
--- Se true, exibe mensagens detalhadas no debug do MTA
+-- ── Debug ─────────────────────────────────────────────────────────────
+-- false em produção | true para ver logs detalhados no console MTA
 MTA_STORE_DEBUG = false
 
--- Mensagens de notificação para os jogadores (personalize à vontade)
+-- ── Mensagens no chat dos jogadores ───────────────────────────────────
 MTA_STORE_MSGS = {
     success       = "#00FF7F[MTA Store] #FFFFFFItem ativado com sucesso! Obrigado pela compra.",
-    offline_queue = "#00FF7F[MTA Store] #FFFFFFVocê tem itens pendentes da loja sendo ativados...",
+    offline_queue = "#00FF7F[MTA Store] #FFFFFFVocê tem itens pendentes sendo ativados...",
     vip_granted   = "#FFD700[MTA Store] #FFFFFFSeu VIP foi ativado! Aproveite os benefícios!",
     coins_granted = "#00BFFF[MTA Store] #FFFFFFFF+%d moedas adicionadas à sua conta!",
-    car_granted   = "#FF6600[MTA Store] #FFFFFFVeículo adicionado! Procure no estacionamento VIP.",
+    car_granted   = "#FF6600[MTA Store] #FFFFFFVeículo adicionado ao seu garagem!",
     skin_granted  = "#CC66FF[MTA Store] #FFFFFFSua skin foi alterada com sucesso!",
     weapon_granted= "#FF4444[MTA Store] #FFFFFFKit de armas entregue!",
+    store_link    = "#00FF7F[MTA Store] #FFFFFFDigite #00BFFF/loja #FFFFFFpara acessar a loja online!",
 }
