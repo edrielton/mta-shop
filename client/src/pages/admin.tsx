@@ -34,7 +34,15 @@ import {
   Clock,
   Loader2,
   Shield,
-  Server
+  Server,
+  ScanLine,
+  Link2,
+  Play,
+  Square,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Plug
 } from "lucide-react";
 import type { Product, Transaction, User, SystemLog } from "@shared/schema";
 
@@ -347,6 +355,10 @@ export default function AdminPage() {
             <TabsTrigger value="settings" data-testid="tab-admin-settings">
               <Settings className="h-4 w-4 mr-2" />
               Configurações
+            </TabsTrigger>
+            <TabsTrigger value="resources" data-testid="tab-admin-resources">
+              <ScanLine className="h-4 w-4 mr-2" />
+              Resources MTA
             </TabsTrigger>
           </TabsList>
 
@@ -741,8 +753,358 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Resources MTA Tab */}
+          <TabsContent value="resources">
+            <ResourcesTab />
+          </TabsContent>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+// ── ResourcesTab ────────────────────────────────────────────────────────────
+
+interface MtaResource {
+  name: string;
+  state: "running" | "loaded" | "starting" | "stopping" | "failed";
+  description: string;
+  author: string;
+  version: string;
+  type: string;
+}
+
+interface ScanResult {
+  success: boolean;
+  total: number;
+  running: number;
+  scannedAt: number;
+  resources: MtaResource[];
+}
+
+function ResourcesTab() {
+  const { toast } = useToast();
+  const [scanData, setScanData] = useState<ScanResult | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterState, setFilterState] = useState<string>("all");
+  const [syncTarget, setSyncTarget] = useState<MtaResource | null>(null);
+  const [syncForm, setSyncForm] = useState({
+    productName: "",
+    description: "",
+    price: "",
+    category: "item",
+    mtaCommand: "",
+    mtaParams: "{}",
+  });
+  const [syncing, setSyncing] = useState(false);
+
+  async function runScan() {
+    setScanning(true);
+    try {
+      const res = await fetch("/api/admin/mta-scan");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Falha ao escanear");
+      }
+      const data = await res.json();
+      setScanData(data);
+      toast({ title: `Scan concluído`, description: `${data.total} resources encontrados, ${data.running} rodando.` });
+    } catch (e: any) {
+      toast({ title: "Erro no scan", description: e.message, variant: "destructive" });
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function handleSync() {
+    if (!syncTarget) return;
+    setSyncing(true);
+    try {
+      let params = {};
+      try { params = JSON.parse(syncForm.mtaParams); } catch { params = {}; }
+
+      const res = await fetch("/api/admin/mta-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceName: syncTarget.name,
+          productName: syncForm.productName,
+          description: syncForm.description,
+          price: parseFloat(syncForm.price),
+          category: syncForm.category,
+          mtaCommand: syncForm.mtaCommand,
+          mtaParams: params,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      toast({ title: "Sincronizado!", description: data.message });
+      setSyncTarget(null);
+      setSyncForm({ productName: "", description: "", price: "", category: "item", mtaCommand: "", mtaParams: "{}" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const filtered = (scanData?.resources || []).filter((r) => {
+    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.description.toLowerCase().includes(search.toLowerCase());
+    const matchState = filterState === "all" || r.state === filterState;
+    return matchSearch && matchState;
+  });
+
+  function stateColor(state: string) {
+    switch (state) {
+      case "running":  return "bg-green-500/10 text-green-500 border-green-500/20";
+      case "loaded":   return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case "failed":   return "bg-red-500/10 text-red-500 border-red-500/20";
+      default:         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+    }
+  }
+
+  function stateLabel(state: string) {
+    const map: Record<string, string> = {
+      running: "Rodando", loaded: "Carregado", failed: "Falhou",
+      starting: "Iniciando", stopping: "Parando",
+    };
+    return map[state] || state;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <ScanLine className="h-5 w-5 text-primary" />
+                Scanner de Resources MTA
+              </CardTitle>
+              <CardDescription>
+                Escaneia todos os mods/resources instalados no servidor MTA e permite sincronizá-los com a loja.
+              </CardDescription>
+            </div>
+            <Button onClick={runScan} disabled={scanning} className="gap-2 shrink-0">
+              {scanning
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Escaneando...</>
+                : <><ScanLine className="h-4 w-4" /> Escanear Servidor</>}
+            </Button>
+          </div>
+        </CardHeader>
+
+        {scanData && (
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <p className="text-2xl font-bold">{scanData.total}</p>
+                <p className="text-xs text-muted-foreground">Total de Resources</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-green-500/10">
+                <p className="text-2xl font-bold text-green-500">{scanData.running}</p>
+                <p className="text-xs text-muted-foreground">Rodando</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-blue-500/10">
+                <p className="text-2xl font-bold text-blue-500">{scanData.total - scanData.running}</p>
+                <p className="text-xs text-muted-foreground">Parados</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground mt-1">Último scan</p>
+                <p className="text-sm font-medium">
+                  {new Date(scanData.scannedAt * 1000).toLocaleTimeString("pt-BR")}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Lista de resources */}
+      {scanData && (
+        <Card>
+          <CardHeader>
+            <div className="flex gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-48">
+                <Input
+                  placeholder="Buscar resource..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-3"
+                />
+              </div>
+              <Select value={filterState} onValueChange={setFilterState}>
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="running">Rodando</SelectItem>
+                  <SelectItem value="loaded">Parados</SelectItem>
+                  <SelectItem value="failed">Com falha</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {filtered.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">Nenhum resource encontrado</p>
+              ) : filtered.map((resource) => (
+                <div key={resource.name} className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors">
+                  <div className={`p-2 rounded-lg ${resource.state === "running" ? "bg-green-500/10" : "bg-muted"}`}>
+                    <Layers className={`h-4 w-4 ${resource.state === "running" ? "text-green-500" : "text-muted-foreground"}`} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-medium text-sm">{resource.name}</span>
+                      <Badge variant="outline" className={`text-xs ${stateColor(resource.state)}`}>
+                        {stateLabel(resource.state)}
+                      </Badge>
+                      {resource.type && resource.type !== "misc" && (
+                        <Badge variant="secondary" className="text-xs">{resource.type}</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {resource.description || "Sem descrição"}
+                      {resource.author && resource.author !== "desconhecido" && ` · por ${resource.author}`}
+                      {resource.version && resource.version !== "?" && ` · v${resource.version}`}
+                    </p>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 shrink-0"
+                    onClick={() => {
+                      setSyncTarget(resource);
+                      setSyncForm(f => ({
+                        ...f,
+                        productName: resource.name,
+                        description: resource.description || "",
+                        mtaCommand: resource.name,
+                      }));
+                    }}
+                  >
+                    <Plug className="h-3.5 w-3.5" />
+                    Sincronizar
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal de sincronização */}
+      {syncTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plug className="h-5 w-5 text-primary" />
+                Sincronizar: <span className="font-mono text-primary">{syncTarget.name}</span>
+              </CardTitle>
+              <CardDescription>
+                Cria um produto na loja vinculado a este resource. O produto começa <strong>desativado</strong> — você ativa quando quiser.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1">
+                <Label>Nome do produto na loja *</Label>
+                <Input
+                  value={syncForm.productName}
+                  onChange={(e) => setSyncForm(f => ({ ...f, productName: e.target.value }))}
+                  placeholder="Ex: VIP Premium"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Descrição</Label>
+                <Input
+                  value={syncForm.description}
+                  onChange={(e) => setSyncForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Descrição para os jogadores"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Preço (R$) *</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={syncForm.price}
+                    onChange={(e) => setSyncForm(f => ({ ...f, price: e.target.value }))}
+                    placeholder="29.90"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Categoria</Label>
+                  <Select value={syncForm.category} onValueChange={(v) => setSyncForm(f => ({ ...f, category: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vip">VIP</SelectItem>
+                      <SelectItem value="vehicle">Veículo</SelectItem>
+                      <SelectItem value="coins">Moedas</SelectItem>
+                      <SelectItem value="item">Item</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Comando MTA *</Label>
+                <Input
+                  value={syncForm.mtaCommand}
+                  onChange={(e) => setSyncForm(f => ({ ...f, mtaCommand: e.target.value }))}
+                  placeholder="Ex: giveVip, giveCoins, giveCar"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Parâmetros (JSON)</Label>
+                <Input
+                  value={syncForm.mtaParams}
+                  onChange={(e) => setSyncForm(f => ({ ...f, mtaParams: e.target.value }))}
+                  placeholder='{"days": 30}'
+                  className="font-mono text-sm"
+                />
+              </div>
+            </CardContent>
+            <div className="flex gap-3 px-6 pb-6">
+              <Button variant="outline" className="flex-1" onClick={() => setSyncTarget(null)}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSync}
+                disabled={syncing || !syncForm.productName || !syncForm.price || !syncForm.mtaCommand}
+              >
+                {syncing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Criando...</> : "Criar Produto"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Sem scan ainda */}
+      {!scanData && !scanning && (
+        <Card>
+          <CardContent className="text-center py-16">
+            <ScanLine className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="font-medium mb-1">Nenhum scan realizado</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Clique em "Escanear Servidor" para ver todos os resources instalados no MTA.
+            </p>
+            <Button onClick={runScan} variant="outline">
+              <ScanLine className="h-4 w-4 mr-2" />
+              Escanear agora
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -2,21 +2,24 @@
 <meta>
     <info
         author="MTA Store"
-        version="1.1.0"
+        version="1.2.0"
         description="MTA Store - Ativação automática de itens comprados no site"
         type="misc"
     />
 
     <!-- Configuração (carregada primeiro) -->
-    <script src="config.lua"  type="server" cache="false"/>
+    <script src="config.lua"   type="server" cache="false"/>
 
-    <!-- Lógica principal do servidor -->
-    <script src="server.lua"  type="server" cache="false"/>
+    <!-- Lógica principal -->
+    <script src="server.lua"   type="server" cache="false"/>
 
-    <!-- Endpoint de ativação: POST /mta_store/activate -->
-    <!-- Endpoint de health:   GET  /mta_store/health   (NOVO) -->
+    <!-- Endpoint: POST /mta_store/activate  (ativar item comprado) -->
+    <!-- Endpoint: GET  /mta_store/health    (health check)         -->
     <html src="activate.lua" default="false" raw="false"/>
 
-    <!-- Arquivo de dados da fila offline (gerado automaticamente) -->
+    <!-- Endpoint: GET  /mta_store/scan      (escanear resources)   -->
+    <html src="scanner.lua"  default="false" raw="false"/>
+
+    <!-- Fila offline -->
     <file src="queue.json"/>
 </meta>

@@ -951,6 +951,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
 
+
+  // ── SCAN DE RESOURCES DO SERVIDOR MTA ──────────────────────────────
+  // Escaneia todos os resources instalados e retorna para o painel admin
+  app.get("/api/admin/mta-scan", requireAdmin, async (_req, res) => {
+    try {
+      const settings = await storage.getMtaSettings();
+      if (!settings || !settings.isActive) {
+        return res.status(400).json({ message: "Servidor MTA não configurado ou inativo." });
+      }
+
+      const scanUrl = `${settings.serverUrl}:${settings.serverPort}/mta_store/scan`;
+      const response = await fetch(scanUrl, {
+        method: "GET",
+        headers: { "X-API-Token": settings.apiToken },
+        signal: AbortSignal.timeout(15000), // scan pode demorar um pouco
+      });
+
+      if (!response.ok) {
+        return res.status(502).json({ message: "MTA retornou erro ao escanear resources." });
+      }
+
+      const data = await response.json();
+
+      await storage.createLog({
+        type: "admin",
+        level: "info",
+        message: `Scan de resources executado: ${data.total} encontrados, ${data.running} rodando`,
+      });
+
+      res.json(data);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Erro desconhecido";
+      res.status(500).json({ message: `Falha ao escanear: ${msg}` });
+    }
+  });
+
+  // Sincroniza um resource com a loja (cria produto baseado no resource)
+  app.post("/api/admin/mta-sync", requireAdmin, async (req, res) => {
+    try {
+      const { resourceName, productName, description, price, category, mtaCommand, mtaParams } = req.body;
+
+      if (!resourceName || !productName || !price || !mtaCommand) {
+        return res.status(400).json({ message: "Campos obrigatórios: resourceName, productName, price, mtaCommand" });
+      }
+
+      const sku = `SYNC-${resourceName.toUpperCase()}-${Date.now()}`;
+
+      const product = await storage.createProduct({
+        name: productName,
+        description: description || `Produto sincronizado do resource: ${resourceName}`,
+        sku,
+        price: String(price),
+        currency: "BRL",
+        category: category || "item",
+        mtaCommand,
+        mtaParams: mtaParams || {},
+        isActive: false, // começa desativado — admin ativa manualmente
+      });
+
+      await storage.createLog({
+        type: "admin",
+        level: "info",
+        message: `Resource "${resourceName}" sincronizado como produto "${productName}" (inativo até aprovação)`,
+      });
+
+      res.json({ product, message: "Produto criado! Ative-o no painel de produtos quando estiver pronto." });
+    } catch (error) {
+      res.status(500).json({ message: "Falha ao sincronizar resource." });
+    }
+  });
+
   // Health check público — usado pelo Cloudflare, Docker e Railway
   app.get("/api/health", (_req, res) => {
     res.json({
