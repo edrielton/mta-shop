@@ -7,12 +7,12 @@
 
 -- ── Autenticação ───────────────────────────────────────────────────────
 -- Token secreto: deve ser IGUAL ao configurado no painel admin do site
-MTA_STORE_TOKEN = "coloque-seu-token-secreto-aqui"
+MTA_STORE_TOKEN =988CBCDD5B9CE9C19EBBE1268A151294
 
 -- ── URL do seu site ────────────────────────────────────────────────────
 -- SEM barra no final!
 -- Exemplo: "https://meuservidor.com.br" ou "https://meuservidor.railway.app"
-MTA_STORE_SITE_URL = "https://seusite.com"
+MTA_STORE_SITE_URL =https://mta-shop-production.up.railway.app/
 
 -- ── Verificação HMAC ──────────────────────────────────────────────────
 -- Recomendado: true (segurança extra nas requisições)
