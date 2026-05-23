@@ -12,7 +12,7 @@ MTA_STORE_TOKEN = 988CBCDD5B9CE9C19EBBE1268A151294
 -- ── URL do seu site ────────────────────────────────────────────────────
 -- SEM barra no final!
 -- Exemplo: "https://meuservidor.com.br" ou "https://meuservidor.railway.app"
-MTA_STORE_SITE_URL = https://mtastore.site/
+MTA_STORE_SITE_URL =https://mta-shop-production.up.railway.app/
 
 -- ── Verificação HMAC ──────────────────────────────────────────────────
 -- Recomendado: true (segurança extra nas requisições)
