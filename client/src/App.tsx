@@ -1,4 +1,5 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,7 +19,38 @@ import AdminPage from "@/pages/admin";
 import CheckoutSuccessPage from "@/pages/checkout-success";
 import CheckoutCancelPage from "@/pages/checkout-cancel";
 
-function Router() {
+// Detecta se está no subdomínio admin (admin.mtastore.site)
+function isAdminSubdomain(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.hostname.startsWith("admin.");
+}
+
+// Roteador para o subdomínio admin
+function AdminSubdomainRouter() {
+  return (
+    <Switch>
+      <Route path="/">
+        {() => (
+          <AdminGuard>
+            <AdminPage />
+          </AdminGuard>
+        )}
+      </Route>
+      <Route path="/auth" component={AuthPage} />
+      <Route path="/login" component={AuthPage} />
+      <Route>
+        {() => (
+          <AdminGuard>
+            <AdminPage />
+          </AdminGuard>
+        )}
+      </Route>
+    </Switch>
+  );
+}
+
+// Roteador principal do site
+function MainRouter() {
   return (
     <Switch>
       <Route path="/"                  component={Home} />
@@ -30,8 +62,6 @@ function Router() {
       <Route path="/dashboard"         component={DashboardPage} />
       <Route path="/checkout/success"  component={CheckoutSuccessPage} />
       <Route path="/checkout/cancel"   component={CheckoutCancelPage} />
-
-      {/* Painel Admin — protegido por IP + login admin */}
       <Route path="/admin">
         {() => (
           <AdminGuard>
@@ -46,18 +76,20 @@ function Router() {
           </AdminGuard>
         )}
       </Route>
-
       <Route component={NotFound} />
     </Switch>
   );
 }
 
 function AppContent() {
+  const onAdminSubdomain = isAdminSubdomain();
+
+  // No subdomínio admin, não mostra o Header principal
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
+      {!onAdminSubdomain && <Header />}
       <main className="flex-1">
-        <Router />
+        {onAdminSubdomain ? <AdminSubdomainRouter /> : <MainRouter />}
       </main>
     </div>
   );

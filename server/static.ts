@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import fs from "fs";
 import path from "path";
 
@@ -11,12 +11,15 @@ export function serveStatic(app: Express) {
     );
   }
 
-  // Serve arquivos estáticos (JS, CSS, imagens)
-  app.use(express.static(distPath));
+  // Serve arquivos estáticos (JS, CSS, imagens, fontes)
+  app.use(express.static(distPath, {
+    maxAge: "1d",
+    etag: true,
+  }));
 
-  // Todas as rotas → index.html (SPA)
-  // O bloqueio por IP fica só nas rotas /api/admin/* no routes.ts
-  app.use("*", (_req, res) => {
+  // Todas as rotas (incluindo admin subdomain) servem o mesmo index.html
+  // O React detecta window.location.hostname e renderiza o conteúdo correto
+  app.get("*", (_req: Request, res: Response) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

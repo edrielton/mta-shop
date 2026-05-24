@@ -214,17 +214,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saveUninitialized: false,
       rolling: true,             // renova o cookie a cada requisição
       cookie: {
-        // secure: true → só envia cookie por HTTPS
-        // Com "trust proxy 1", Express sabe que está atrás de proxy HTTPS
         secure: isProd,
         httpOnly: true,
-        // sameSite "lax" funciona quando o domínio do site e da API são os mesmos
-        // (mtastore.site → Railway via Cloudflare)
         sameSite: "lax",
-        maxAge: sessionTTL * 1000, // 7 dias em ms
+        maxAge: sessionTTL * 1000,
+        // Domínio com ponto = funciona em todos os subdomínios
+        // Ex: mtastore.site E admin.mtastore.site
+        domain: isProd ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
       },
     })
   );
+
+
+  // Debug de sessão — remova em produção quando tudo estiver funcionando
+  app.get("/api/debug/session", (req, res) => {
+    res.json({
+      sessionID:  req.sessionID,
+      hasSession: !!req.session,
+      userId:     req.session?.userId || null,
+      cookie:     req.session?.cookie,
+      store:      sessionStore ? "PostgreSQL" : "Memory",
+    });
+  });
 
   // Security headers
   app.use((_req, res, next) => {

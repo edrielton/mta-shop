@@ -1,15 +1,12 @@
 /**
  * AdminGuard.tsx
- * Protege as rotas /admin no frontend:
- *  1. Verifica se o usuário é admin
- *  2. Verifica se a API /admin responde (backend já bloqueou por IP)
- *     Se retornar 404 → IP não autorizado → redireciona para 404
+ * Protege rotas admin: verifica se o usuário está logado e é admin.
+ * Se não estiver logado → redireciona para login.
+ * Se não for admin → mostra 404.
  */
-
-import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface Props {
   children: React.ReactNode;
@@ -17,26 +14,10 @@ interface Props {
 
 export default function AdminGuard({ children }: Props) {
   const { user, isLoading } = useAuth();
-  const [, navigate]        = useLocation();
-  const [checking, setChecking] = useState(true);
-  const [blocked,  setBlocked]  = useState(false);
+  const [, navigate] = useLocation();
 
-  useEffect(() => {
-    // Verifica se o backend permite acesso (teste de IP)
-    fetch("/api/admin/stats", { method: "GET" })
-      .then((res) => {
-        if (res.status === 404) {
-          // IP bloqueado pelo backend
-          setBlocked(true);
-        }
-        setChecking(false);
-      })
-      .catch(() => {
-        setChecking(false);
-      });
-  }, []);
-
-  if (isLoading || checking) {
+  // Aguarda verificação de sessão
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -44,25 +25,16 @@ export default function AdminGuard({ children }: Props) {
     );
   }
 
-  // IP bloqueado → 404 genérico
-  if (blocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-3">
-          <p className="text-6xl font-bold text-muted-foreground">404</p>
-          <p className="text-muted-foreground">Página não encontrada.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Não logado → redireciona para login
+  // Não logado → vai para login
   if (!user) {
-    navigate("/login");
+    const loginUrl = typeof window !== "undefined" && window.location.hostname.startsWith("admin.")
+      ? "/auth"
+      : "/auth";
+    navigate(loginUrl);
     return null;
   }
 
-  // Logado mas não é admin → 404 (não revela que existe painel)
+  // Logado mas não é admin → 404 genérico
   if (!user.isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
