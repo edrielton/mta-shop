@@ -400,7 +400,11 @@ local function doSync(player)
 
     -- Envia para o site
     fetchRemote(
+<<<<<<< HEAD
         MTA_STORE_SITE_URL .. "/api/mta/sync",
+=======
+        MTA_STORE_SITE_URL .. "/api/admin/mta-command-sync",
+>>>>>>> e7138a83cf3280dc79544e2aebc0c60b1f7376eb
         {
             method         = "POST",
             postData       = toJSON({source="command", trigger=triggerName, total=#resources, detected=detected, resources=resources, scannedAt=os.time()}),

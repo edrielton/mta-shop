@@ -6,7 +6,10 @@ import {
   loginSchema, registerSchema, insertProductSchema, changePasswordSchema
 } from "@shared/schema";
 import session from "express-session";
+<<<<<<< HEAD
 import connectPgSimple from "connect-pg-simple";
+=======
+>>>>>>> e7138a83cf3280dc79544e2aebc0c60b1f7376eb
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import crypto from "crypto";
@@ -179,6 +182,7 @@ async function processCompletedPayment(stripeSessionId: string, paymentIntentId:
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+<<<<<<< HEAD
   // Sessões persistentes no PostgreSQL — sobrevivem a restarts do servidor
   const PgStore = connectPgSimple(session);
   const sessionTTL = 7 * 24 * 60 * 60; // 7 dias em segundos
@@ -201,6 +205,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         httpOnly: true,
         sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         maxAge: sessionTTL * 1000,
+=======
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "mta-store-secret-key-change-in-production",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+>>>>>>> e7138a83cf3280dc79544e2aebc0c60b1f7376eb
       },
     })
   );
@@ -973,7 +989,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
 
   // Recebe sync disparado pelo comando /storesync no MTA
+<<<<<<< HEAD
   app.post("/api/mta/sync", async (req, res) => {
+=======
+  app.post("/api/admin/mta-command-sync", async (req, res) => {
+>>>>>>> e7138a83cf3280dc79544e2aebc0c60b1f7376eb
     try {
       const apiToken = req.headers["x-api-token"];
       const settings = await storage.getMtaSettings();
