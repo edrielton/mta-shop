@@ -179,28 +179,49 @@ async function processCompletedPayment(stripeSessionId: string, paymentIntentId:
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  // Sessões persistentes no PostgreSQL — sobrevivem a restarts do servidor
-  const PgStore = connectPgSimple(session);
+  const isProd = process.env.NODE_ENV === "production";
   const sessionTTL = 7 * 24 * 60 * 60; // 7 dias em segundos
+
+  // Session store: PostgreSQL em produção, memória em dev
+  let sessionStore: session.Store | undefined;
+
+  if (isProd && process.env.DATABASE_URL) {
+    try {
+      const PgStore = connectPgSimple(session);
+      sessionStore = new PgStore({
+        conString: process.env.DATABASE_URL,
+        tableName: "user_sessions_store",
+        createTableIfMissing: true,
+        ttl: sessionTTL,
+        pruneSessionInterval: 60 * 60,
+        errorLog: (err) => console.error("[SessionStore]", err),
+      });
+      console.log("[Session] Usando PostgreSQL store (sessões persistentes)");
+    } catch (err) {
+      console.error("[Session] Falha ao criar PgStore:", err);
+      console.warn("[Session] Usando MemoryStore como fallback");
+    }
+  } else {
+    console.log("[Session] Usando MemoryStore (desenvolvimento)");
+  }
 
   app.use(
     session({
-      store: new PgStore({
-        conString: process.env.DATABASE_URL,
-        tableName: "user_sessions_store",
-        createTableIfMissing: true, // cria a tabela automaticamente
-        ttl: sessionTTL,
-        pruneSessionInterval: 60 * 60, // limpa sessões expiradas a cada 1h
-      }),
-      secret: process.env.SESSION_SECRET || "mta-store-secret-key-change-in-production",
+      store: sessionStore,
+      secret: process.env.SESSION_SECRET || "mta-store-secret-change-in-production",
+      name: "mta.sid",           // nome fixo do cookie (não o padrão "connect.sid")
       resave: false,
       saveUninitialized: false,
-      rolling: true, // renova o cookie a cada requisição
+      rolling: true,             // renova o cookie a cada requisição
       cookie: {
-        secure: process.env.NODE_ENV === "production",
+        // secure: true → só envia cookie por HTTPS
+        // Com "trust proxy 1", Express sabe que está atrás de proxy HTTPS
+        secure: isProd,
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-        maxAge: sessionTTL * 1000,
+        // sameSite "lax" funciona quando o domínio do site e da API são os mesmos
+        // (mtastore.site → Railway via Cloudflare)
+        sameSite: "lax",
+        maxAge: sessionTTL * 1000, // 7 dias em ms
       },
     })
   );
@@ -714,9 +735,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ============ ADMIN ROUTES ============
 
-  // ── Proteção de IP para todas as rotas admin ─────────────────────────
-  app.use(["/admin", "/api/admin"], adminIpGuard, logAdminAccess);
-
+  // Proteção de IP removida do middleware global (Cloudflare muda o IP)
+  // A segurança é feita pelo requireAdmin (sessão + login)
   app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     try {
       res.json(await storage.getAdminStats());
