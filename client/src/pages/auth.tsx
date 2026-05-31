@@ -34,9 +34,24 @@ type RegisterForm = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
-  const { login, register } = useAuth();
+  const { user, isLoading: authLoading, login, register } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+
+  // Login automático (se a sessão já existir, redireciona para o dashboard)
+  if (!authLoading && user) {
+    setLocation("/dashboard");
+    return null;
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
 
   const loginForm = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),

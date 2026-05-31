@@ -13,6 +13,67 @@ import crypto from "crypto";
 import { broadcastPlayerData, broadcastAdmin } from "./websocket";
 import { adminIpGuard, logAdminAccess } from "./adminGuard";
 import { hashSessionToken, parseDeviceName, detectSuspiciousActivity } from "./security";
+import { Router } from "express";
+
+const router = Router();
+
+/**
+ * Banco fake (troque por MySQL depois)
+ */
+const players: any[] = [];
+
+/**
+ * POST /api/player/sync
+ */
+router.post("/api/player/sync", (req, res) => {
+  try {
+    const { serial, name, money, health } = req.body;
+
+    // ❌ validação obrigatória
+    if (!serial) {
+      return res.status(400).json({
+        success: false,
+        error: "serial obrigatório",
+      });
+    }
+
+    // 🔍 procura player
+    let player = players.find((p) => p.serial === serial);
+
+    // 🆕 cria se não existir
+    if (!player) {
+      player = {
+        serial,
+        name: name || "unknown",
+        money: money || 0,
+        health: health || 100,
+        createdAt: new Date(),
+      };
+
+      players.push(player);
+    } else {
+      // 🔄 atualiza se existir
+      player.name = name || player.name;
+      player.money = money ?? player.money;
+      player.health = health ?? player.health;
+      player.updatedAt = new Date();
+    }
+
+    return res.json({
+      success: true,
+      player,
+    });
+  } catch (error) {
+    console.error("SYNC ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: "internal error",
+    });
+  }
+});
+
+export default router;
 
 declare module "express-session" {
   interface SessionData {
@@ -231,12 +292,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         httpOnly: true,
         sameSite: "lax",
         maxAge: sessionTTL * 1000,
-        // Domínio com ponto = funciona em todos os subdomínios
-        // Ex: mtastore.site E admin.mtastore.site
-        domain: isProd ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
+        // Removido domain para evitar inconsistências em proxies/CDN.
+        // Como o admin está em https://mtastore.site/admin, o cookie host-only já funciona.
+        domain: undefined,
       },
     })
   );
+
 
 
   // Debug de sessão — remova em produção quando tudo estiver funcionando
@@ -965,20 +1027,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
 
-  // Admin: desbloquear conta manualmente
-  app.post("/api/admin/users/:id/unlock", requireAdmin, async (req, res) => {
-    try {
-      await storage.resetFailedLogins(req.params.id);
-      const user = await storage.getUser(req.params.id);
-      await storage.createLog({
-        type: "admin", level: "info",
-        message: `Conta ${user?.username || req.params.id} desbloqueada pelo admin`,
-      });
-      res.json({ success: true, message: "Conta desbloqueada com sucesso." });
-    } catch (error) {
-      res.status(500).json({ message: "Erro ao desbloquear conta" });
-    }
-  });
+
+
+  // ── ALTERNATIVA: autenticação admin via token MTA para painel/scan ──
+  // O scanner/painel pode não ter sessão/cookie.
+  // Permitimos header x-api-token (mesmo usado em requireAdmin) sem precisar login.
+
 
   app.get("/api/admin/mta-settings", requireAdmin, async (req, res) => {
     try {
@@ -1165,12 +1219,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ── SCAN DE RESOURCES DO SERVIDOR MTA ──────────────────────────────
   // Escaneia todos os resources instalados e retorna para o painel admin
-  app.get("/api/admin/mta-scan", requireAdmin, async (_req, res) => {
+  // Permite autenticação via token (header x-api-token) ou sessão (cookie)
+  app.get("/api/admin/mta-scan", async (req, res) => {
     try {
+      const apiToken = req.headers["x-api-token"] as string | undefined;
+
+      // valida token se enviado; caso não, valida sessão
+      if (!req.session?.userId) {
+        if (!apiToken) return res.status(401).json({ message: "Authentication required" });
+
+        const settings = await storage.getMtaSettings();
+        if (!settings || apiToken !== settings.apiToken) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+      } else {
+        // sessão presente: exige admin
+        const user = await storage.getUser(req.session.userId);
+        if (!user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
+        (req as any).adminUser = user;
+      }
+
       const settings = await storage.getMtaSettings();
       if (!settings || !settings.isActive) {
         return res.status(400).json({ message: "Servidor MTA não configurado ou inativo." });
       }
+
 
       const scanUrl = `${settings.serverUrl}:${settings.serverPort}/mta_store/scan`;
       const response = await fetch(scanUrl, {
@@ -1199,8 +1272,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Sincroniza um resource com a loja (cria produto baseado no resource)
-  app.post("/api/admin/mta-sync", requireAdmin, async (req, res) => {
+  app.post("/api/admin/mta-sync", async (req, res) => {
     try {
+      const apiToken = req.headers["x-api-token"] as string | undefined;
+
+      if (!req.session?.userId) {
+        if (!apiToken) return res.status(401).json({ message: "Authentication required" });
+        const settings = await storage.getMtaSettings();
+        if (!settings || apiToken !== settings.apiToken) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+      } else {
+        const user = await storage.getUser(req.session.userId);
+        if (!user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
+        (req as any).adminUser = user;
+      }
+
       const { resourceName, productName, description, price, category, mtaCommand, mtaParams } = req.body;
 
       if (!resourceName || !productName || !price || !mtaCommand) {
@@ -1218,7 +1305,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         category: category || "item",
         mtaCommand,
         mtaParams: mtaParams || {},
-        isActive: false, // começa desativado — admin ativa manualmente
+        isActive: false,
       });
 
       await storage.createLog({
@@ -1234,27 +1321,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
 
+
   // ══════════════════════════════════════════════════════════════════
   // PLAYER SYNC — recebe dados do servidor MTA e auto-login
   // ══════════════════════════════════════════════════════════════════
 
   // MTA envia token de auto-login gerado no servidor
+  // (rota separada para tokens. Evita duplicar /api/player/sync)
   app.post("/api/player/token", async (req, res) => {
     try {
-      const { serial, token, expiresIn } = req.body;
       const apiToken = req.headers["x-api-token"];
-
       const settings = await storage.getMtaSettings();
+
       if (!settings || apiToken !== settings.apiToken) {
         return res.status(401).json({ success: false, error: "Unauthorized" });
       }
 
-      if (!serial || !token) {
-        return res.status(400).json({ success: false, error: "serial e token obrigatórios" });
+      const { serial, token, expiresIn = 300 } = req.body;
+      if (!serial) {
+        return res.status(400).json({ success: false, error: "serial obrigatório" });
+      }
+      if (!token) {
+        return res.status(400).json({ success: false, error: "token obrigatório" });
       }
 
-      const expiresAt = new Date(Date.now() + (expiresIn || 300) * 1000);
-
+      const expiresAt = new Date(Date.now() + Number(expiresIn) * 1000);
       await storage.upsertPlayerToken({ serial, token, expiresAt });
 
       res.json({ success: true });
@@ -1263,6 +1354,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ success: false, error: "Internal error" });
     }
   });
+
 
   // MTA sincroniza dados do jogador
   app.post("/api/player/sync", async (req, res) => {
