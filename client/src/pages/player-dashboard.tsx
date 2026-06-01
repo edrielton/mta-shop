@@ -71,7 +71,7 @@ export default function PlayerDashboardPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.success) {
-window.location.href = "/auth";
+          window.location.href = "/auth";
         } else {
           navigate("/login?erro=" + encodeURIComponent(data.message || "Token inválido"));
         }
