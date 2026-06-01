@@ -501,7 +501,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (current) await storage.revokeSession(current.id, req.session.userId || "");
     }
     req.session.destroy(() => {
-      res.clearCookie("connect.sid");
+res.clearCookie("mta.sid");
       res.json({ success: true });
     });
   });

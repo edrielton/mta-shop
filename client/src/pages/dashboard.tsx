@@ -40,7 +40,8 @@ function formatPrice(price: string | number, currency = "BRL") {
   }).format(numPrice);
 }
 
-function formatDate(date: string | Date) {
+function formatDate(date: string | Date | null) {
+  if (!date) return "—";
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "short",

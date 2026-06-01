@@ -71,7 +71,7 @@ export default function PlayerDashboardPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.success) {
-          window.location.href = "/entrar";
+window.location.href = "/auth";
         } else {
           navigate("/login?erro=" + encodeURIComponent(data.message || "Token inválido"));
         }
@@ -80,8 +80,9 @@ export default function PlayerDashboardPage() {
       .finally(() => setAutoLogging(false));
   }, []);
 
-  const serial = user?.mtaSerial;
+  const serial = user?.mtaSerial ?? undefined;
   const { realtimeData, lastUpdate, connected: wsConnected } = usePlayerRealtime(serial);
+
 
   const { data, isLoading } = useQuery<{ player: PlayerData }>({
     queryKey: ["/api/player/data"],
@@ -93,7 +94,6 @@ export default function PlayerDashboardPage() {
       return res.json();
     },
     enabled: !!user,
-    refetchInterval: 30000, // atualiza a cada 30s
   });
 
   if (autoLogging) {
