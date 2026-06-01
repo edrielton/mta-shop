@@ -807,7 +807,7 @@ function ResourcesTab() {
   async function runScan() {
     setScanning(true);
     try {
-      const res = await fetch("/api/admin/mta-scan");
+      const res = await fetch("/api/admin/mta-scan", { credentials: "include" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Erro ao escanear");
       setScan(data);
@@ -821,7 +821,7 @@ function ResourcesTab() {
   async function autoSync() {
     setSyncing(true);
     try {
-      const res  = await fetch("/api/admin/mta-auto-sync", { method: "POST" });
+      const res  = await fetch("/api/admin/mta-auto-sync", { method: "POST", credentials: "include" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       toast({ title: "Sync concluído!", description: data.message });
