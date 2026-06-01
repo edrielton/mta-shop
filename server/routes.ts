@@ -153,6 +153,12 @@ async function requireActiveAccount(req: Request, res: Response, next: NextFunct
   if (!user) return next();
 
   if (user.isSuspended) {
+    console.warn("[Auth] Sessão destruída por conta suspensa", {
+      sessionUserId: req.session.userId,
+      userId: user.id,
+      isSuspended: user.isSuspended,
+      suspendedReason: user.suspendedReason,
+    });
     req.session.destroy(() => {});
     return res.status(403).json({
       message: "Conta suspensa.",
@@ -161,8 +167,14 @@ async function requireActiveAccount(req: Request, res: Response, next: NextFunct
     });
   }
 
+
   const lockStatus = await storage.isAccountLocked(user.id);
   if (lockStatus.locked) {
+    console.warn("[Auth] Sessão destruída por conta bloqueada", {
+      sessionUserId: req.session.userId,
+      userId: user.id,
+      lockedUntil: lockStatus.until,
+    });
     req.session.destroy(() => {});
     return res.status(403).json({
       message: "Conta temporariamente bloqueada por excesso de tentativas de login.",
@@ -170,6 +182,7 @@ async function requireActiveAccount(req: Request, res: Response, next: NextFunct
       code: "ACCOUNT_LOCKED",
     });
   }
+
 
   // Atualiza lastSeen da sessão a cada requisição
   const sessionToken = hashSessionToken(req.sessionID);
@@ -288,9 +301,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saveUninitialized: false,
       rolling: true,             // renova o cookie a cada requisição
       cookie: {
-        secure: isProd,
+        secure: true,
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "none",
         maxAge: sessionTTL * 1000,
         // Removido domain para evitar inconsistências em proxies/CDN.
         // Como o admin está em https://mtastore.site/admin, precisamos compartilhar sessão entre
