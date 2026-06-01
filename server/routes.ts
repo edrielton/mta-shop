@@ -293,8 +293,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         sameSite: "lax",
         maxAge: sessionTTL * 1000,
         // Removido domain para evitar inconsistências em proxies/CDN.
-        // Como o admin está em https://mtastore.site/admin, o cookie host-only já funciona.
-        domain: undefined,
+        // Como o admin está em https://mtastore.site/admin, precisamos compartilhar sessão entre
+        // rotas/subdomínios sob mtastore.site.
+        domain: ".mtastore.site",
       },
     })
   );
