@@ -17,63 +17,13 @@ import { Router } from "express";
 
 const router = Router();
 
-/**
- * Banco fake (troque por MySQL depois)
- */
-const players: any[] = [];
+// Router está mantido apenas para compatibilidade de estrutura, mas rotas são definidas
+// exclusivamente dentro de registerRoutes().
 
-/**
- * POST /api/player/sync
- */
-router.post("/api/player/sync", (req, res) => {
-  try {
-    const { serial, name, money, health } = req.body;
+// NOTE: remova o Router fake/”players em memória”.
+// Esta rota deve ser única e baseada em banco (storage.upsertPlayerData) dentro de registerRoutes().
+// O export default router foi removido para evitar conflitos de import/rota.
 
-    // ❌ validação obrigatória
-    if (!serial) {
-      return res.status(400).json({
-        success: false,
-        error: "serial obrigatório",
-      });
-    }
-
-    // 🔍 procura player
-    let player = players.find((p) => p.serial === serial);
-
-    // 🆕 cria se não existir
-    if (!player) {
-      player = {
-        serial,
-        name: name || "unknown",
-        money: money || 0,
-        health: health || 100,
-        createdAt: new Date(),
-      };
-
-      players.push(player);
-    } else {
-      // 🔄 atualiza se existir
-      player.name = name || player.name;
-      player.money = money ?? player.money;
-      player.health = health ?? player.health;
-      player.updatedAt = new Date();
-    }
-
-    return res.json({
-      success: true,
-      player,
-    });
-  } catch (error) {
-    console.error("SYNC ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: "internal error",
-    });
-  }
-});
-
-export default router;
 
 declare module "express-session" {
   interface SessionData {
@@ -480,6 +430,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       req.session.userId = user.id;
 
+// (removido) console.warn com detalhes sensíveis de sessão
+      
+
       // Registra sessão no banco
       await storage.createSession({
         userId: user.id,
@@ -515,13 +468,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (current) await storage.revokeSession(current.id, req.session.userId || "");
     }
     req.session.destroy(() => {
-res.clearCookie("mta.sid");
+res.clearCookie("mta.sid", {
+      domain: ".mtastore.site",
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      sameSite: "none",
+    });
       res.json({ success: true });
     });
   });
 
   // Usuário atual
   app.get("/api/auth/me", async (req, res) => {
+// (removido) console.warn com detalhes sensíveis de sessão
+
+    
+
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const user = await storage.getUser(req.session.userId);
     if (!user) return res.status(401).json({ message: "User not found" });
