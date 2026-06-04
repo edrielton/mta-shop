@@ -570,7 +570,7 @@ class App(tk.Tk):
 
         try:
             req = urllib.request.Request(
-                url + "/api/admin/mta-command-sync",
+                url + "/api/mta/sync",
                 data    = payload,
                 headers = {
                     "Content-Type": "application/json",

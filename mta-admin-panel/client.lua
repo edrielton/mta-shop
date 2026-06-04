@@ -3,6 +3,7 @@
 local guiBrowser = nil
 local theBrowser = nil
 local isOpen     = false
+local usedMode   = ""
 
 addEvent("mta_admin:show",        true)
 addEvent("mta_admin:apiResponse", true)
@@ -15,55 +16,30 @@ addEventHandler("mta_admin:show", root, function(url, token)
 
     local sw, sh = guiGetScreenSize()
 
-    -- MTA 1.6 suporta guiCreateBrowser
+    usedMode = "guiCreateBrowser"
     guiBrowser = guiCreateBrowser(0, 0, sw, sh, false, false, false)
-
     if not guiBrowser then
-        -- Fallback: createBrowser com dxDrawImage
-        theBrowser = createBrowser(sw, sh, false, false)
-        if not theBrowser then
-            outputChatBox("[Admin Panel] Erro ao criar browser.", 255, 80, 80)
-            return
-        end
-
-        addEventHandler("onClientBrowserCreated", theBrowser, function()
-            loadBrowserURL(theBrowser, getResourceURL(getThisResource()) .. "panel.html")
-        end)
-
-        addEventHandler("onClientBrowserDocumentReady", theBrowser, function()
-            executeBrowserJavascript(theBrowser, string.format(
-                'window.MTA_CONFIG={siteUrl:"%s",token:"%s"};if(window.onMtaConfig)window.onMtaConfig();',
-                url, token
-            ))
-        end)
-
-        addEventHandler("onClientBrowserMessage", theBrowser, function(msg)
-            local ok, data = pcall(fromJSON, msg)
-            if not ok or type(data) ~= "table" then return end
-            if data.type == "close" then closePanel()
-            elseif data.type == "api" then
-                triggerServerEvent("mta_admin:apiCall", localPlayer,
-                    data.id, data.method, data.endpoint, data.body)
-            end
-        end)
-
-        addEventHandler("onClientRender", root, function()
-            if theBrowser and isElement(theBrowser) then
-                dxDrawImage(0, 0, sw, sh, theBrowser, 0, 0, 0, tocolor(255,255,255,255), false)
-            end
-        end)
-
-        showCursor(true)
-        isOpen = true
-        outputChatBox("[Admin Panel] Painel aberto. ESC para fechar.", 100, 255, 100)
+        outputChatBox("[Admin Panel] Erro ao criar guiBrowser.", 255, 80, 80)
         return
     end
 
-    -- guiCreateBrowser funcionou
+    guiSetAlpha(guiBrowser, 255)
+    guiBringToFront(guiBrowser)
+
+    -- o objeto navegador real
     theBrowser = guiGetBrowser(guiBrowser)
 
     addEventHandler("onClientBrowserCreated", theBrowser, function()
-        loadBrowserURL(theBrowser, getResourceURL(getThisResource()) .. "panel.html")
+        local url = getResourceURL(getThisResource()) .. "panel.html"
+        outputChatBox("[Admin Panel] Loading browser URL: " .. tostring(url), 255, 220, 50)
+        loadBrowserURL(theBrowser, url)
+
+        setTimer(function()
+            if guiBrowser and isElement(guiBrowser) then
+                guiSetAlpha(guiBrowser, 255)
+                guiBringToFront(guiBrowser)
+            end
+        end, 200, 1)
     end)
 
     addEventHandler("onClientBrowserDocumentReady", theBrowser, function()
@@ -71,12 +47,14 @@ addEventHandler("mta_admin:show", root, function(url, token)
             'window.MTA_CONFIG={siteUrl:"%s",token:"%s"};if(window.onMtaConfig)window.onMtaConfig();',
             url, token
         ))
+        outputChatBox("[Admin Panel] panel.html carregado.", 160, 220, 255)
     end)
 
     addEventHandler("onClientBrowserMessage", theBrowser, function(msg)
         local ok, data = pcall(fromJSON, msg)
         if not ok or type(data) ~= "table" then return end
-        if data.type == "close" then closePanel()
+        if data.type == "close" then
+            closePanel()
         elseif data.type == "api" then
             triggerServerEvent("mta_admin:apiCall", localPlayer,
                 data.id, data.method, data.endpoint, data.body)
@@ -85,7 +63,7 @@ addEventHandler("mta_admin:show", root, function(url, token)
 
     showCursor(true)
     isOpen = true
-    outputChatBox("[Admin Panel] Painel aberto. ESC para fechar.", 100, 255, 100)
+    outputChatBox("[Admin Panel] Painel aberto (" .. usedMode .. "). ESC para fechar.", 100, 255, 100)
 end)
 
 addEventHandler("mta_admin:apiResponse", root, function(callId, success, response)
@@ -97,8 +75,8 @@ addEventHandler("mta_admin:apiResponse", root, function(callId, success, respons
 end)
 
 function closePanel()
+    if theBrowser and isElement(theBrowser) then destroyElement(theBrowser) end
     if guiBrowser and isElement(guiBrowser) then destroyElement(guiBrowser) end
-    if theBrowser and isElement(theBrowser) and not guiBrowser then destroyElement(theBrowser) end
     guiBrowser = nil
     theBrowser = nil
     showCursor(false)

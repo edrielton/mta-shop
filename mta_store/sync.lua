@@ -11,10 +11,14 @@ local function postToSite(endpoint, data, cb)
     fetchRemote(MTA_STORE_SITE_URL .. endpoint, {
         method="POST",
         postData=toJSON(data),
-        headers={["Content-Type"]="application/json", ["X-API-Token"]=MTA_STORE_TOKEN},
+        headers={
+            ["Content-Type"]="application/json",
+            ["X-API-Token"]=MTA_STORE_TOKEN,
+        },
         connectTimeout=10000, readTimeout=10000,
     }, function(response, errno)
         if errno ~= 0 then
+            outputChatBox(MTA_STORE_MSG_PREFIX .. "Erro POST " .. endpoint .. " (errno " .. tostring(errno) .. ")", source, 255, 255, 255, true)
             if MTA_STORE_DEBUG then outputDebugString("[MTA-Store] errno " .. errno .. " em " .. endpoint, 2) end
             return
         end

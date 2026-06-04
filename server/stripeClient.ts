@@ -12,7 +12,12 @@ export async function getUncachableStripeClient(): Promise<Stripe> {
     throw new Error("STRIPE_SECRET_KEY não definida nas variáveis de ambiente.");
   }
   if (!_stripe) {
-    _stripe = new Stripe(secret, { apiVersion: "2025-11-17.clover" });
+    _stripe = new Stripe(secret, {
+      // Para evitar incompatibilidade de types/slugs do SDK, deixamos o SDK escolher a apiVersion.
+      // (ainda depende da versão instalada do pacote stripe).
+    });
+
+
   }
   return _stripe;
 }

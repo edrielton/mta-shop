@@ -329,6 +329,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/checkout", requireActiveAccount);
   app.use("/api/admin", requireActiveAccount);
 
+  // MTA resources (no cookie session). Não bloquear /api/player e /api/mta.
+  app.use("/api/player", (_req: Request, _res: Response, next: NextFunction) => next());
+  app.use("/api/mta", (_req: Request, _res: Response, next: NextFunction) => next());
+
 
   // ============ STRIPE WEBHOOK ============
 
@@ -1426,8 +1430,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const apiToken = req.headers["x-api-token"];
 
       const settings = await storage.getMtaSettings();
-      if (!settings || apiToken !== settings.apiToken) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
+      // Se não existe mtaSettings criado, mas o mod está enviando token via header,
+      // não bloqueamos aqui: ajudamos a diagnosticar. (volta a bloquear quando criar settings)
+      if (!settings) {
+        return res.status(401).json({
+          success: false,
+          error: "Unauthorized: mtaSettings not configured",
+          receivedTokenPresent: Boolean(apiToken),
+        });
+      }
+
+      if (apiToken !== settings.apiToken) {
+        return res.status(401).json({ success: false, error: "Unauthorized: invalid api token" });
       }
 
       const { serial, online, ...playerData } = req.body;
