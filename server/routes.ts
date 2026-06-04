@@ -11,18 +11,12 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import crypto from "crypto";
 import { broadcastPlayerData, broadcastAdmin } from "./websocket";
-import { adminIpGuard, logAdminAccess } from "./adminGuard";
+
 import { hashSessionToken, parseDeviceName, detectSuspiciousActivity } from "./security";
-import { Router } from "express";
 
-const router = Router();
 
-// Router está mantido apenas para compatibilidade de estrutura, mas rotas são definidas
-// exclusivamente dentro de registerRoutes().
 
-// NOTE: remova o Router fake/”players em memória”.
-// Esta rota deve ser única e baseada em banco (storage.upsertPlayerData) dentro de registerRoutes().
-// O export default router foi removido para evitar conflitos de import/rota.
+
 
 
 declare module "express-session" {
@@ -1459,5 +1453,8 @@ res.clearCookie("mta.sid", {
     });
   });
 
+
+
   return httpServer;
 }
+

@@ -117,12 +117,16 @@ function handleClientMessage(clientId: string, client: WSClient, msg: any) {
     }
 
     // Cliente se identifica (após login)
+    // Segurança: NÃO confiamos em msg.isAdmin vindo do cliente.
+    // O servidor só usa admin=true se o back autenticar via sessão/cookie
+    // (no momento, este servidor WS é apenas informativo; por isso, desabilitamos isAdmin vindo do cliente).
     case "auth": {
-      client.userId  = msg.userId;
-      client.isAdmin = msg.isAdmin === true;
+      client.userId = typeof msg.userId === "string" ? msg.userId : undefined;
+      client.isAdmin = false;
       sendTo(client.ws, { type: "authed", userId: client.userId });
       break;
     }
+
 
     // Ping manual do cliente
     case "ping": {

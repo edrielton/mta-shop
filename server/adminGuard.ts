@@ -27,11 +27,12 @@ function getClientIp(req: Request): string {
 export function adminIpGuard(req: Request, res: Response, next: NextFunction) {
   const allowedIps = getAllowedIps();
 
-  // Se ADMIN_ALLOWED_IPS não estiver configurado, libera (evita bloqueio acidental)
+  // Se ADMIN_ALLOWED_IPS não estiver configurado, BLOQUEIA por padrão.
+  // Fail-closed para evitar admin aberto acidentalmente.
   if (allowedIps.length === 0) {
-    console.warn("[AdminGuard] ADMIN_ALLOWED_IPS não configurado — acesso admin liberado para todos. Configure para proteger.");
-    return next();
+    return res.status(403).json({ message: "Admin access not configured" });
   }
+
 
   const clientIp = getClientIp(req);
 
