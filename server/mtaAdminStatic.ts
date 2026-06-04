@@ -16,13 +16,13 @@ export function serveMtaAdminPanelStatic(app: Express) {
     throw new Error(`panel.html não encontrado em: ${panelPath}`);
   }
 
-  // url: /mta-admin-panel/panel.html
-  app.get("/mta-admin-panel/panel.html", (req: Request, res: Response) => {
+  const sendPanelHtml = (req: Request, res: Response) => {
     const html = fs.readFileSync(panelPath, "utf-8");
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+
     // debug: também loga alguns headers e status
-    console.log("[MTA-Admin Static] /mta-admin-panel/panel.html", {
+    console.log("[MTA-Admin Static] panel.html", {
       method: req.method,
       path: req.path,
       contentType: res.getHeader("Content-Type"),
@@ -31,7 +31,14 @@ export function serveMtaAdminPanelStatic(app: Express) {
     });
 
     res.status(200).send(html);
-  });
+  };
+
+  // url: /mta-admin-panel/panel.html
+  app.get("/mta-admin-panel/panel.html", sendPanelHtml);
+
+  // compat: sua rota no MTA é /admin
+  app.get("/admin", sendPanelHtml);
+
 
 
 }
