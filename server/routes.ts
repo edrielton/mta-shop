@@ -273,10 +273,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       res.json({
         sessionID,
+        sessionTokenHash: token,
         hasSession: !!req.session,
         userId,
-        sessionRow: sessionRow ? { id: sessionRow.id, userId: sessionRow.userId, isRevoked: sessionRow.isRevoked } : null,
         cookie: req.session?.cookie,
+        // se o store estiver certo, sessionRow não deveria ser null
+        sessionRow: sessionRow ? {
+          id: sessionRow.id,
+          userId: sessionRow.userId,
+          isRevoked: sessionRow.isRevoked,
+          expiresAt: sessionRow.expiresAt,
+        } : null,
         store: sessionStore ? "PostgreSQL" : "Memory",
       });
     } catch (e) {
