@@ -294,12 +294,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     try {
       const stripe = await getUncachableStripeClient();
-      if (webhookSecret && sig && req.rawBody) {
-        event = stripe.webhooks.constructEvent(req.rawBody as Buffer, sig, webhookSecret);
-      } else {
-        const raw = req.rawBody instanceof Buffer ? req.rawBody.toString("utf8") : JSON.stringify(req.body);
-        event = JSON.parse(raw);
+      if (!webhookSecret || !sig) {
+        return res.status(400).json({ message: "Webhook misconfigured" });
       }
+
+      if (!req.rawBody || !(req.rawBody instanceof Buffer)) {
+        return res.status(400).json({ message: "Webhook rawBody missing" });
+      }
+
+      event = stripe.webhooks.constructEvent(req.rawBody as Buffer, sig, webhookSecret);
     } catch (err) {
       return res.status(400).json({ message: "Webhook signature invalid" });
     }
@@ -463,14 +466,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const current = sessions.find(s => s.sessionToken === token);
       if (current) await storage.revokeSession(current.id, req.session.userId || "");
     }
+    const sessionSecure = process.env.SESSION_COOKIE_SECURE === "false" ? false : isProd;
+
     req.session.destroy(() => {
-res.clearCookie("mta.sid", {
-      domain: ".mtastore.site",
-      path: "/",
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
-    });
+      res.clearCookie("mta.sid", {
+        domain: ".mtastore.site",
+        path: "/",
+        secure: sessionSecure,
+        httpOnly: true,
+        sameSite: "none",
+      });
       res.json({ success: true });
     });
   });

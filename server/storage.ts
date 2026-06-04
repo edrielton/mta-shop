@@ -219,6 +219,13 @@ export class DatabaseStorage implements IStorage {
       .update(userSessions)
       .set({ isRevoked: true })
       .where(and(eq(userSessions.id, sessionId), eq(userSessions.userId, userId)));
+
+    // drizzle-orm expõe rowCount
+    // (se a versão/driver não expuser, o fallback mantém compatibilidade)
+    const rowCount = (result as any)?.rowCount;
+    if (typeof rowCount === "number") return rowCount > 0;
+
+    // fallback conservador: se não sabemos, tratamos como sucesso
     return true;
   }
 
