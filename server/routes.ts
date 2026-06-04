@@ -262,14 +262,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
 
   // Debug de sessão — remova em produção quando tudo estiver funcionando
-  app.get("/api/debug/session", (req, res) => {
-    res.json({
-      sessionID:  req.sessionID,
-      hasSession: !!req.session,
-      userId:     req.session?.userId || null,
-      cookie:     req.session?.cookie,
-      store:      sessionStore ? "PostgreSQL" : "Memory",
-    });
+  app.get("/api/debug/session", async (req, res) => {
+    try {
+      const sessionID = req.sessionID;
+      const userId = req.session?.userId ?? null;
+      const token = hashSessionToken(sessionID);
+
+      // tentar ler também pela store (evita blindagem do express-session)
+      const sessionRow = await storage.getSession(token);
+
+      res.json({
+        sessionID,
+        hasSession: !!req.session,
+        userId,
+        sessionRow: sessionRow ? { id: sessionRow.id, userId: sessionRow.userId, isRevoked: sessionRow.isRevoked } : null,
+        cookie: req.session?.cookie,
+        store: sessionStore ? "PostgreSQL" : "Memory",
+      });
+    } catch (e) {
+      res.status(500).json({ message: "debug failed", error: e instanceof Error ? e.message : String(e) });
+    }
   });
 
   // Security headers
