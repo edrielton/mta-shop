@@ -245,13 +245,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saveUninitialized: false,
       rolling: true,             // renova o cookie a cada requisição
       cookie: {
-        secure: true,
+        // HTTPS obrigatório quando sameSite="none".
+        // Em produção, por padrão usamos secure=true, mas permitimos ajuste via env.
+        secure: process.env.SESSION_COOKIE_SECURE === "false"
+          ? false
+          : isProd,
         httpOnly: true,
         sameSite: "none",
         maxAge: sessionTTL * 1000,
-        // Removido domain para evitar inconsistências em proxies/CDN.
-        // Como o admin está em https://mtastore.site/admin, precisamos compartilhar sessão entre
-        // rotas/subdomínios sob mtastore.site.
+        // Usamos domain fixo para compartilhar sessão entre subdomínios sob mtastore.site.
         domain: ".mtastore.site",
       },
     })
