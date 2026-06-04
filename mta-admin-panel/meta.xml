@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<meta>
+    <info
+        author="MTA Store"
+        version="1.3.0"
+        description="MTA Store - Painel Admin In-Game"
+        type="script"
+    />
+    <script src="server.lua" type="server" cache="false"/>
+    <script src="client.lua" type="client" cache="false"/>
+    <file src="panel.html"/>
+    <min_mta_version client="1.5.8" server="1.5.8"/>
+</meta>
