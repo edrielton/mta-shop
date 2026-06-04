@@ -299,10 +299,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     next();
   });
 
+  // ================= SESSION HYDRATION (Drizzle / user_sessions) =================
+  // express-session pode ter o cookie válido, mas req.session.userId pode não hidratar.
+  // Como você quer “tudo no Drizzle”, buscamos a sessão no banco usando sessionID (cookie).
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Se já tem userId, nada a fazer
+      if (req.session?.userId) return next();
+
+      // Se não existe sessão ID, não dá para consultar
+      if (!req.sessionID) return next();
+
+      const tokenHash = hashSessionToken(req.sessionID);
+      const sessionRow = await storage.getSession(tokenHash);
+
+      if (sessionRow?.userId) {
+        req.session.userId = sessionRow.userId;
+      }
+
+      return next();
+    } catch {
+      // Não quebra request por falha de hidratação
+      return next();
+    }
+  });
+
   // Aplica verificação de conta em todas as rotas autenticadas
   app.use("/api/user", requireAuth, requireActiveAccount);
   app.use("/api/checkout", requireActiveAccount);
   app.use("/api/admin", requireActiveAccount);
+
 
   // ============ STRIPE WEBHOOK ============
 
