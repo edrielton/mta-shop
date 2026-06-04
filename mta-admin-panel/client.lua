@@ -45,9 +45,10 @@ addEventHandler("mta_admin:show", root, function(url, token)
             -- fallback: tenta um caminho comum de servidor web do MTA
             -- (ajuste se seu host servir arquivos de resource por outra rota)
             local resName = getResourceName(getThisResource())
-            -- endpoint HTTP servido pelo backend Node (server/mtaAdminStatic.ts)
-            -- O MTA carrega via internet, então usamos o SITE_URL que já veio no evento.
-            localUrl = tostring(url) .. "/mta-admin-panel/panel.html"
+            -- endpoint HTTP do painel no site
+            -- conforme sua confirmação: https://mtastore.site/admin
+            localUrl = tostring(url) .. "/admin"
+
 
         end
         outputChatBox("[Admin Panel] url local=" .. tostring(localUrl), 255, 220, 50)
@@ -83,10 +84,14 @@ addEventHandler("mta_admin:show", root, function(url, token)
                     connectTimeout = 5000,
                     readTimeout = 5000,
                 }, function(resp, errno)
-                    outputChatBox("[Admin Panel] fetchRemote HTML test errno=" .. tostring(errno) .. ", len=" .. tostring(resp and #resp or 0), 255, 200, 50)
+                    local len = 0
+                    if type(resp) == "string" then len = #resp end
+                    outputChatBox("[Admin Panel] fetchRemote HTML test errno=" .. tostring(errno) .. ", len=" .. tostring(len) .. " type=" .. tostring(type(resp)), 255, 200, 50)
                 end)
             end
+            -- force load com http GET via loadBrowserURL
             loadBrowserURL(theBrowser, localUrl)
+
         end)
 
 

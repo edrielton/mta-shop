@@ -9,6 +9,7 @@ local function chat(player, msg) outputChatBox(MTA_STORE_MSG_PREFIX .. msg, play
 
 local function postToSite(endpoint, data, cb)
     fetchRemote(MTA_STORE_SITE_URL .. endpoint, {
+
         method="POST",
         postData=toJSON(data),
         headers={
