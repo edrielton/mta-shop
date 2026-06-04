@@ -676,6 +676,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // PIX checkout (gera QR EMV dinâmico por transação)
   app.post("/api/checkout", requireAuth, rateLimit(3, 60 * 1000, true), async (req, res) => {
     try {
       const { productId } = req.body;
@@ -693,12 +694,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
 
-      // Verifica suspensão e bloqueio antes do checkout
       if (user.isSuspended) {
         return res.status(403).json({ message: "Conta suspensa. Compra não autorizada.", code: "ACCOUNT_SUSPENDED" });
       }
 
-      // ── Detecção de atividade suspeita ─────────────────────────
       const userStats = await storage.getUserStats(user.id);
       const purchaseAmount = parseFloat(product.price);
       const purchaseIp = req.ip || "unknown";
@@ -720,62 +719,104 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      const stripe = await getUncachableStripeClient();
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.email,
-          metadata: { userId: user.id, username: user.username },
-        });
-        customerId = customer.id;
-        await storage.updateUser(user.id, { stripeCustomerId: customerId });
-      }
-
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const baseUrl = `${protocol}://${req.headers.host}`;
-
-      const stripeSession = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ["card"],
-        line_items: [{
-          price_data: {
-            currency: (product.currency || "brl").toLowerCase(),
-            product_data: { name: product.name, description: product.description || undefined },
-            unit_amount: Math.round(purchaseAmount * 100),
-          },
-          quantity: 1,
-        }],
-        mode: "payment",
-        success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/checkout/cancel`,
-        metadata: { productId: product.id, userId: user.id },
-        expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-      });
-
-      await storage.createTransaction({
+      // Criar transação primeiro (gera ID que entra no QR)
+      const tx = await storage.createTransaction({
         userId: user.id,
         productId: product.id,
-        stripeCheckoutSessionId: stripeSession.id,
+        stripeCheckoutSessionId: undefined,
         amount: product.price,
         currency: product.currency || "BRL",
         status: "pending",
-        paymentMethod: "stripe",
+        paymentMethod: "pix",
         purchaseIp,
         isSuspicious: suspicion.suspicious,
         suspiciousReason: suspicion.reason,
-      });
+        // campos Pix (guardamos em metadata)
+        metadata: {
+          pix: {
+            chave: "10c8ab93-f439-4c27-8b98-55c16541454a",
+            recebedor: "Edrelton de Andrade Silva",
+            uf: "PE",
+          },
+        },
+      } as any);
+
+      const txAmount = purchaseAmount;
+
+      // Helpers EMV Pix (dinâmico) 
+      const pad2 = (n: number) => String(n).padStart(2, "0");
+      const formatAmount = (v: number) => v.toFixed(2).replace(".", "");
+      const tlv = (id: string, value: string) => {
+        const len = String(value).length;
+        return `${id}${pad2(len)}${value}`;
+      };
+
+      // Payloads
+      const chavePix = "10c8ab93-f439-4c27-8b98-55c16541454a";
+      const recebedor = "Edrelton de Andrade Silva";
+      const uf = "PE";
+
+      const merchantAccountInfo = (() => {
+        // 01 Pix
+        const a01 = tlv("01", "01");
+        // 02 chave
+        const a02 = tlv("02", chavePix);
+        const a03 = tlv("03", "" );
+        const sub = `${a01}${a02}`;
+        // tag 26 (Merchant Account Information)
+        return tlv("26", sub);
+      })();
+
+      const merchantCategoryCode = tlv("52", "0000");
+      const transactionCurrency = tlv("53", "986"); // BRL
+      const transactionAmount = tlv("54", formatAmount(txAmount));
+      const countryCode = tlv("58", "BR");
+
+      const merchantName = tlv("59", recebedor.slice(0, 25));
+      const merchantCity = tlv("60", uf);
+
+      const additionalDataFieldTemplate = (() => {
+        // 05 ID transação
+        const txid = tlv("05", tx.id);
+        // tag 62
+        return tlv("62", txid);
+      })();
+
+      const crc = (() => {
+        const payload = `000201${merchantAccountInfo}${merchantCategoryCode}${transactionCurrency}${transactionAmount}${countryCode}${merchantName}${merchantCity}${additionalDataFieldTemplate}6304`;
+        // CRC16-CCITT (polinômio 0x1021, init 0xFFFF)
+        let crcVal = 0xFFFF;
+        for (let i = 0; i < payload.length; i++) {
+          crcVal ^= payload.charCodeAt(i) << 8;
+          for (let j = 0; j < 8; j++) {
+            if (crcVal & 0x8000) crcVal = (crcVal << 1) ^ 0x1021;
+            else crcVal = crcVal << 1;
+            crcVal &= 0xFFFF;
+          }
+        }
+        const out = crcVal.toString(16).toUpperCase().padStart(4, "0");
+        return out;
+      })();
+
+      const pixEmv = `000201${merchantAccountInfo}${merchantCategoryCode}${transactionCurrency}${transactionAmount}${countryCode}${merchantName}${merchantCity}${additionalDataFieldTemplate}6304${crc}`;
 
       await storage.createLog({
         type: "payment", level: "info",
-        message: `Checkout criado: ${product.name}${suspicion.suspicious ? " ⚠️ SUSPEITO" : ""}`,
+        message: `Checkout PIX criado: ${product.name} (tx ${tx.id.slice(0, 8)})`,
         userId: user.id,
-        metadata: { productId: product.id, sessionId: stripeSession.id, suspicious: suspicion.suspicious },
+        metadata: { productId: product.id, txId: tx.id },
       });
 
-      res.json({ url: stripeSession.url });
+      res.json({
+        paymentMethod: "pix",
+        transactionId: tx.id,
+        pixEmv,
+        amount: product.price,
+        currency: product.currency || "BRL",
+      });
     } catch (error) {
       console.error("Checkout error:", error);
-      res.status(500).json({ message: "Failed to create checkout session" });
+      res.status(500).json({ message: "Failed to create PIX checkout" });
     }
   });
 

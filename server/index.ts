@@ -8,8 +8,8 @@ const app = express();
 const httpServer = createServer(app);
 
 // CRÍTICO: informa ao Express que está atrás de proxy (Railway + Cloudflare)
-// Sem isso, req.secure = false mesmo com HTTPS, e cookies secure não funcionam
-app.set("trust proxy", 1);
+// Mantém req.secure consistente e evita comportamento inesperado de cookies.
+app.set("trust proxy", true);
 
 declare module "http" {
   interface IncomingMessage {
