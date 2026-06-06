@@ -10,11 +10,6 @@
 import crypto from "crypto";
 import type { Request } from "express";
 
-/** Gera um hash SHA-256 da session ID do express-session para armazenar no banco */
-export function hashSessionToken(sessionId: string): string {
-  return crypto.createHash("sha256").update(sessionId).digest("hex");
-}
-
 /**
  * Extrai o IP real do cliente, levando em conta:
  * - CF-Connecting-IP (Cloudflare)
@@ -31,7 +26,7 @@ export function getRealIp(req: Request): string {
     if (first) return first.trim();
   }
 
-  return req.ip || "unknown";
+return req.ip || "unknown";
 }
 
 /** Gera um hash SHA-256 da session ID do express-session para armazenar no banco */
@@ -39,7 +34,9 @@ export function hashSessionToken(sessionId: string): string {
   return crypto.createHash("sha256").update(sessionId).digest("hex");
 }
 
+
 /** Extrai um nome amigável do dispositivo a partir do User-Agent */
+
 export function parseDeviceName(userAgent?: string): string {
   if (!userAgent) return "Dispositivo desconhecido";
 
