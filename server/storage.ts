@@ -230,27 +230,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async revokeAllSessionsExcept(userId: string, currentToken: string): Promise<number> {
-    await db
-      .update(userSessions)
-      .set({ isRevoked: true })
+    // Busca todas as sessões ativas do usuário ANTES de revogar qualquer uma
+    const sessions = await db
+      .select()
+      .from(userSessions)
       .where(
         and(
           eq(userSessions.userId, userId),
           eq(userSessions.isRevoked, false),
-          // Exclui a sessão atual
-          // Usando raw SQL para != 
+          gte(userSessions.expiresAt, new Date())
         )
       );
-    // Workaround para "not equal" no drizzle sem importar sql
-    const sessions = await db
-      .select()
-      .from(userSessions)
-      .where(and(eq(userSessions.userId, userId), eq(userSessions.isRevoked, false)));
 
+    // Revoga apenas as sessões que não são a atual
     let count = 0;
     for (const session of sessions) {
       if (session.sessionToken !== currentToken) {
-        await db.update(userSessions).set({ isRevoked: true }).where(eq(userSessions.id, session.id));
+        await db
+          .update(userSessions)
+          .set({ isRevoked: true })
+          .where(eq(userSessions.id, session.id));
         count++;
       }
     }
@@ -299,8 +298,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProduct(id: string): Promise<boolean> {
-    await db.delete(products).where(eq(products.id, id));
-    return true;
+    const result = await db.delete(products).where(eq(products.id, id)).returning({ id: products.id });
+    return result.length > 0;
   }
 
   // ── TRANSACTIONS ───────────────────────────────────────────────

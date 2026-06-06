@@ -12,7 +12,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { broadcastPlayerData, broadcastAdmin } from "./websocket";
 
-import { hashSessionToken, parseDeviceName, detectSuspiciousActivity } from "./security";
+import { hashSessionToken, parseDeviceName, detectSuspiciousActivity, getRealIp } from "./security";
 
 
 
@@ -49,12 +49,15 @@ function rateLimit(maxRequests: number, windowMs: number, useUserId = false) {
   };
 }
 
-setInterval(() => {
+const rateLimitCleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitStore.entries()) {
     if (now > entry.resetAt) rateLimitStore.delete(key);
   }
 }, 5 * 60 * 1000);
+
+// Permite cancelar o interval em testes ou shutdown gracioso
+export function clearRateLimitInterval() { clearInterval(rateLimitCleanupInterval); }
 
 // ============ AUTH MIDDLEWARE ============
 
@@ -246,10 +249,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       rolling: true,             // renova o cookie a cada requisição
       cookie: {
         // HTTPS obrigatório quando sameSite="none".
-        // Em produção, por padrão usamos secure=true, mas permitimos ajuste via env.
-        secure: process.env.SESSION_COOKIE_SECURE === "false"
-          ? false
-          : isProd,
+        // Em produção, sempre secure=true. Nunca permitir override via env em prod.
+        secure: isProd ? true : process.env.SESSION_COOKIE_SECURE !== "false",
         httpOnly: true,
         sameSite: "none",
         maxAge: sessionTTL * 1000,
@@ -260,36 +261,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
 
-
-  // Debug de sessão — remova em produção quando tudo estiver funcionando
-  app.get("/api/debug/session", async (req, res) => {
-    try {
-      const sessionID = req.sessionID;
-      const userId = req.session?.userId ?? null;
-      const token = hashSessionToken(sessionID);
-
-      // tentar ler também pela store (evita blindagem do express-session)
-      const sessionRow = await storage.getSession(token);
-
-      res.json({
-        sessionID,
-        sessionTokenHash: token,
-        hasSession: !!req.session,
-        userId,
-        cookie: req.session?.cookie,
-        // se o store estiver certo, sessionRow não deveria ser null
-        sessionRow: sessionRow ? {
-          id: sessionRow.id,
-          userId: sessionRow.userId,
-          isRevoked: sessionRow.isRevoked,
-          expiresAt: sessionRow.expiresAt,
-        } : null,
-        store: sessionStore ? "PostgreSQL" : "Memory",
-      });
-    } catch (e) {
-      res.status(500).json({ message: "debug failed", error: e instanceof Error ? e.message : String(e) });
-    }
-  });
 
   // Security headers
   app.use((_req, res, next) => {
@@ -752,7 +723,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const userStats = await storage.getUserStats(user.id);
       const purchaseAmount = parseFloat(product.price);
-      const purchaseIp = req.ip || "unknown";
+      const purchaseIp = getRealIp(req);
 
       const suspicion = detectSuspiciousActivity({
         purchaseIp,
@@ -772,6 +743,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // Criar transação primeiro (gera ID que entra no QR)
+      // Dados Pix vindos de variáveis de ambiente — nunca hardcoded
+      const chavePix   = process.env.PIX_KEY      || "";
+      const recebedor  = process.env.PIX_RECIPIENT || "";
+      const uf         = process.env.PIX_UF        || "";
+
+      if (!chavePix || !recebedor || !uf) {
+        console.error("[Checkout] Variáveis PIX_KEY, PIX_RECIPIENT ou PIX_UF não configuradas.");
+        return res.status(500).json({ message: "Configuração de pagamento incompleta. Contate o suporte." });
+      }
+
       const tx = await storage.createTransaction({
         userId: user.id,
         productId: product.id,
@@ -783,19 +764,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         purchaseIp,
         isSuspicious: suspicion.suspicious,
         suspiciousReason: suspicion.reason,
-        // campos Pix (guardamos em metadata)
-        metadata: {
-          pix: {
-            chave: "10c8ab93-f439-4c27-8b98-55c16541454a",
-            recebedor: "Edrelton de Andrade Silva",
-            uf: "PE",
-          },
-        },
+        metadata: { pix: { chave: chavePix, recebedor, uf } },
       } as any);
 
       const txAmount = purchaseAmount;
 
-      // Helpers EMV Pix (dinâmico) 
+      // Helpers EMV Pix (dinâmico)
       const pad2 = (n: number) => String(n).padStart(2, "0");
       const formatAmount = (v: number) => v.toFixed(2).replace(".", "");
       const tlv = (id: string, value: string) => {
@@ -803,18 +777,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `${id}${pad2(len)}${value}`;
       };
 
-      // Payloads
-      const chavePix = "10c8ab93-f439-4c27-8b98-55c16541454a";
-      const recebedor = "Edrelton de Andrade Silva";
-      const uf = "PE";
-
       const merchantAccountInfo = (() => {
-        // 01 Pix
-        const a01 = tlv("01", "01");
-        // 02 chave
-        const a02 = tlv("02", chavePix);
-        const a03 = tlv("03", "" );
-        const sub = `${a01}${a02}`;
+        // Campo 00: GUI obrigatório pela spec Banco Central
+        const a00 = tlv("00", "br.gov.bcb.pix");
+        // Campo 01: chave Pix
+        const a01 = tlv("01", chavePix);
+        const sub = `${a00}${a01}`;
         // tag 26 (Merchant Account Information)
         return tlv("26", sub);
       })();
@@ -828,8 +796,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const merchantCity = tlv("60", uf);
 
       const additionalDataFieldTemplate = (() => {
-        // 05 ID transação
-        const txid = tlv("05", tx.id);
+        // 05 ID transação (txid — máx 25 chars)
+        const txid = tlv("05", tx.id.replace(/-/g, "").slice(0, 25));
         // tag 62
         return tlv("62", txid);
       })();
@@ -846,8 +814,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             crcVal &= 0xFFFF;
           }
         }
-        const out = crcVal.toString(16).toUpperCase().padStart(4, "0");
-        return out;
+        return crcVal.toString(16).toUpperCase().padStart(4, "0");
       })();
 
       const pixEmv = `000201${merchantAccountInfo}${merchantCategoryCode}${transactionCurrency}${transactionAmount}${countryCode}${merchantName}${merchantCity}${additionalDataFieldTemplate}6304${crc}`;
@@ -865,6 +832,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         pixEmv,
         amount: product.price,
         currency: product.currency || "BRL",
+        // ATENÇÃO: o pagamento PIX não é confirmado automaticamente.
+        // A ativação MTA só ocorre após o admin confirmar o pagamento manualmente
+        // via POST /api/admin/transactions/:id/retry ou integração com webhook Pix.
+        requiresManualConfirmation: true,
       });
     } catch (error) {
       console.error("Checkout error:", error);
@@ -1498,16 +1469,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let user = await storage.getUserByMtaSerial(playerToken.serial);
 
       if (!user) {
-        // Cria conta automaticamente pelo serial
+        // Cria conta automaticamente pelo serial.
+        // Username usa o serial truncado (único por definição) para evitar colisões.
         const playerData = await storage.getPlayerData(playerToken.serial);
-        const username = playerData?.nome
-          ? playerData.nome.replace(/\s+/g, "").toLowerCase().slice(0, 20) + Math.floor(Math.random() * 999)
-          : "jogador" + Math.floor(Math.random() * 99999);
+        const serialSuffix = playerToken.serial.replace(/[^a-zA-Z0-9]/g, "").slice(-8).toLowerCase();
+        const baseName = playerData?.nome
+          ? playerData.nome.replace(/\s+/g, "").toLowerCase().slice(0, 12)
+          : "jogador";
+        const username = `${baseName}_${serialSuffix}`;
+
+        // Senha gerada com crypto — não é usável via login normal (conta somente MTA)
+        const securePassword = crypto.randomBytes(32).toString("hex");
 
         user = await storage.createUser({
           username,
-          email: `${username}@mtastore.local`,
-          password: Math.random().toString(36),
+          email: `${serialSuffix}@mtastore.local`,
+          password: securePassword,
           mtaSerial: playerToken.serial,
         });
       }
@@ -1532,16 +1509,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Retorna dados do jogador (público pelo serial, ou do usuário logado)
+  // Retorna dados do jogador — somente o próprio usuário ou admin
   app.get("/api/player/data/:serial?", async (req, res) => {
     try {
-      const serial = req.params.serial || (
-        req.session.userId
-          ? (await storage.getUser(req.session.userId))?.mtaSerial
-          : null
-      );
+      const requestedSerial = req.params.serial;
 
+      // Resolve o serial do usuário logado (se houver)
+      let ownerSerial: string | null = null;
+      if (req.session.userId) {
+        const me = await storage.getUser(req.session.userId);
+        ownerSerial = me?.mtaSerial ?? null;
+
+        // Admin pode ver qualquer serial
+        if (me?.isAdmin && requestedSerial) {
+          const data = await storage.getPlayerData(requestedSerial);
+          if (!data) return res.status(404).json({ message: "Jogador não encontrado" });
+          return res.json({ player: data });
+        }
+      }
+
+      // Sem sessão: não retorna nada
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Usuário comum só pode ver o próprio serial
+      const serial = requestedSerial || ownerSerial;
       if (!serial) return res.status(400).json({ message: "Serial não encontrado" });
+
+      if (requestedSerial && requestedSerial !== ownerSerial) {
+        return res.status(403).json({ message: "Acesso negado: você só pode ver seus próprios dados." });
+      }
 
       const data = await storage.getPlayerData(serial);
       if (!data) return res.status(404).json({ message: "Jogador não encontrado" });

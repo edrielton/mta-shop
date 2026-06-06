@@ -4,9 +4,35 @@
  * - parseDevice: identifica o navegador/OS a partir do User-Agent
  * - hashSessionToken: cria hash SHA-256 da session ID para armazenar no banco
  * - detectSuspiciousActivity: verifica se uma compra parece suspeita
+ * - getRealIp: extrai o IP real do cliente (considera Cloudflare e proxies)
  */
 
 import crypto from "crypto";
+import type { Request } from "express";
+
+/** Gera um hash SHA-256 da session ID do express-session para armazenar no banco */
+export function hashSessionToken(sessionId: string): string {
+  return crypto.createHash("sha256").update(sessionId).digest("hex");
+}
+
+/**
+ * Extrai o IP real do cliente, levando em conta:
+ * - CF-Connecting-IP (Cloudflare)
+ * - X-Forwarded-For (proxies genéricos — pega o primeiro hop, não o último)
+ * - req.ip (Express com trust proxy)
+ */
+export function getRealIp(req: Request): string {
+  const cf = req.headers["cf-connecting-ip"];
+  if (cf && typeof cf === "string") return cf.trim();
+
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0];
+    if (first) return first.trim();
+  }
+
+  return req.ip || "unknown";
+}
 
 /** Gera um hash SHA-256 da session ID do express-session para armazenar no banco */
 export function hashSessionToken(sessionId: string): string {
