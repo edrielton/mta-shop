@@ -416,6 +416,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       req.session.userId = user.id;
 
+// (removido) console.warn com detalhes sensíveis de sessão
+      
+
       // Registra sessão no banco
       await storage.createSession({
         userId: user.id,
@@ -437,24 +440,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ user: safeUser });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
-
-      const err = error as any;
-      // Observabilidade: mostra stack e contexto mínimo (sem senha)
-      console.error("[Auth/Login] Fatal error", {
-        username: (req.body as any)?.username,
-        hasSessionId: Boolean((req as any)?.sessionID),
-        sessionID: (req as any)?.sessionID ? String((req as any).sessionID) : undefined,
-        errorMessage: err?.message,
-        errorName: err?.name,
-        stack: err?.stack,
-      });
-
-      const isProd = process.env.NODE_ENV === "production";
-      if (isProd) return res.status(500).json({ message: "Falha no login" });
-      return res.status(500).json({ message: `Falha no login: ${err?.message || "Internal error"}` });
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Falha no login" });
     }
   });
-
 
   // Logout
   app.post("/api/auth/logout", async (req, res) => {
@@ -1239,6 +1228,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
 
 
+
+  // Alias usado pelo painel admin ("Testar conexão")
+  app.get("/api/admin/mta-test", requireAdmin, async (_req, res) => {
+    try {
+      const settings = await storage.getMtaSettings();
+      if (!settings?.serverUrl) {
+        return res.json({ success: false, message: "Servidor MTA não configurado" });
+      }
+      try {
+        const resp = await fetch(`${settings.serverUrl}:${settings.serverPort}/mta_store/health`, {
+          method: "GET",
+          headers: { "X-API-Token": settings.apiToken },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (resp.ok) return res.json({ success: true, message: "Servidor MTA respondeu com sucesso" });
+        return res.json({ success: false, message: `Servidor retornou HTTP ${resp.status}` });
+      } catch (e: any) {
+        return res.json({ success: false, message: `Sem resposta: ${e.message}` });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Erro interno" });
+    }
+  });
 
   // Recebe sync disparado pelo comando /storesync no MTA
   app.post("/api/mta/sync", async (req, res) => {
