@@ -1,19 +1,39 @@
--- MTA STORE - sync.lua
--- Sync via elementData (sem banco de dados proprio)
+-- MTA STORE - sync.lua (MTA nativo - sem oxmysql)
+-- Usa dbConnect/dbQuery nativo do MTA SA
 -- Comandos: /loja | /store | /shop
 
 local SYNC_INTERVAL = 30
+local db = nil
 
-local function log(msg)  outputServerLog("[MTA-Store Sync] " .. tostring(msg)) end
-local function dbg(msg)  if MTA_STORE_DEBUG then outputDebugString("[MTA-Store] " .. tostring(msg), 3) end end
-local function chat(p,m) outputChatBox(MTA_STORE_MSG_PREFIX .. m, p, 255, 255, 255, true) end
+local function log(msg) outputServerLog("[MTA-Store Sync] " .. tostring(msg)) end
+local function chat(player, msg) outputChatBox(MTA_STORE_MSG_PREFIX .. msg, player, 255, 255, 255, true) end
 
--- ── POST para o site ──────────────────────────────────────────────────
+-- ── Conexao com o banco de dados ──────────────────────────────────────
+-- Lê as credenciais do config.lua (adicione as variaveis abaixo no config.lua)
+local function connectDB()
+    if db then return db end
+    -- Usa as variaveis definidas em config.lua
+    local host = MTA_DB_HOST     or "127.0.0.1"
+    local port = MTA_DB_PORT     or 3306
+    local user = MTA_DB_USER     or "root"
+    local pass = MTA_DB_PASS     or ""
+    local name = MTA_DB_NAME     or "mta_roleplay"
+
+    db = dbConnect("mysql", "dbname=" .. name .. ";host=" .. host .. ";port=" .. tostring(port), user, pass, "share=0;autoreconnect=1")
+    if db then
+        log("Banco de dados conectado: " .. host .. "/" .. name)
+    else
+        log("ERRO: Falha ao conectar no banco de dados!")
+    end
+    return db
+end
+
+-- ── HTTP para o site ──────────────────────────────────────────────────
 local function postToSite(endpoint, data, cb)
     fetchRemote(MTA_STORE_SITE_URL .. endpoint, {
-        method         = "POST",
-        postData       = toJSON(data),
-        headers        = {
+        method = "POST",
+        postData = toJSON(data),
+        headers = {
             ["Content-Type"] = "application/json",
             ["X-API-Token"]  = MTA_STORE_TOKEN,
         },
@@ -21,48 +41,85 @@ local function postToSite(endpoint, data, cb)
         readTimeout    = 10000,
     }, function(response, errno)
         if errno ~= 0 then
-            dbg("ERRO POST " .. endpoint .. " errno=" .. tostring(errno))
+            if MTA_STORE_DEBUG then
+                log("ERRO POST " .. endpoint .. " errno=" .. tostring(errno))
+            end
             return
         end
         if cb then cb(fromJSON(response)) end
     end)
 end
 
--- ── Coleta dados via elementData e envia ao site ──────────────────────
--- Adapte os nomes dos elementData para os que seu gamemode usa
-local function syncPlayer(player)
+-- ── Busca dados do jogador no banco e envia ao site ───────────────────
+local function fetchAndSync(player)
     if not isElement(player) then return end
-    local serial = getPlayerSerial(player)
-    local acc    = getPlayerAccount(player)
-    local nome   = getElementData(player, "char:nome") or getPlayerName(player)
+    local conn = connectDB()
+    if not conn then
+        if MTA_STORE_DEBUG then log("fetchAndSync: sem conexao DB") end
+        return
+    end
 
-    postToSite("/api/player/sync", {
-        serial       = serial,
-        online       = true,
-        updatedAt    = os.time(),
-        nome         = nome,
-        dinheiro     = getElementData(player, "dinheiro")      or getElementData(player, "money")    or 0,
-        banco        = getElementData(player, "banco")         or getElementData(player, "bank")     or 0,
-        faccao       = getElementData(player, "faccao")        or getElementData(player, "faction")  or "Nenhuma",
-        cargo        = getElementData(player, "cargo")         or getElementData(player, "rank")     or "Membro",
-        emprego      = getElementData(player, "emprego")       or getElementData(player, "job")      or "Desempregado",
-        nivel        = getElementData(player, "nivel")         or getElementData(player, "level")    or 1,
-        xp           = getElementData(player, "xp")           or 0,
-        vida         = getElementData(player, "vida")          or getElementData(player, "health")   or getElementHealth(player),
-        colete       = getElementData(player, "colete")        or getElementData(player, "armor")    or getPedArmor(player),
-        skin         = getElementModel(player),
-        vipAtivo     = getElementData(player, "vip:active")    or false,
-        vipDias      = getElementData(player, "vip:days")      or 0,
-        coins        = getElementData(player, "coins")         or 0,
-        veiculos     = {},
-        inventario   = {},
-    }, nil)
+    local serial = getPlayerSerial(player)
+
+    -- Busca dados principais do jogador
+    dbQuery(function(qh)
+        if not isElement(player) then return end
+        local row = dbPoll(qh, 0)
+        if not row or not row[1] then
+            if MTA_STORE_DEBUG then log("fetchAndSync: jogador nao encontrado serial=" .. serial) end
+            return
+        end
+        local r = row[1]
+
+        -- Busca veiculos
+        dbQuery(function(qhV)
+            if not isElement(player) then return end
+            local veiculos = dbPoll(qhV, 0) or {}
+
+            -- Busca inventario
+            dbQuery(function(qhI)
+                if not isElement(player) then return end
+                local inventario = dbPoll(qhI, 0) or {}
+
+                -- Envia tudo ao site
+                postToSite("/api/player/sync", {
+                    serial        = serial,
+                    online        = true,
+                    updatedAt     = os.time(),
+                    nome          = (r.nome or "") .. " " .. (r.sobrenome or ""),
+                    idade         = r.idade         or 0,
+                    sexo          = r.sexo          or "M",
+                    skin          = r.skin          or 0,
+                    horasJogadas  = r.horas_jogadas or 0,
+                    dinheiro      = r.dinheiro      or 0,
+                    banco         = r.banco         or 0,
+                    faccao        = r.faccao        or "Nenhuma",
+                    cargo         = r.cargo         or "Membro",
+                    emprego       = r.emprego       or "Desempregado",
+                    nivel         = r.nivel         or 1,
+                    xp            = r.xp            or 0,
+                    vida          = r.vida          or 100,
+                    colete        = r.colete        or 0,
+                    cnh           = (r.cnh == 1 or r.cnh == true),
+                    rg            = (r.rg  == 1 or r.rg  == true),
+                    porteArma     = (r.porte_arma == 1 or r.porte_arma == true),
+                    veiculos      = veiculos,
+                    inventario    = inventario,
+                }, nil)
+
+            end, conn, "SELECT item, quantidade FROM inventario WHERE serial = ? LIMIT 50", serial)
+        end, conn, "SELECT modelo, placa, cor, garagem FROM veiculos WHERE serial = ? LIMIT 20", serial)
+
+    end, conn,
+        "SELECT dinheiro, banco, faccao, cargo, emprego, nivel, xp, vida, colete, nome, sobrenome, idade, sexo, skin, cnh, rg, porte_arma, horas_jogadas FROM jogadores WHERE serial = ? LIMIT 1",
+        serial
+    )
 end
 
--- ── Gera token de acesso rapido ao site ───────────────────────────────
+-- ── Gera token de login e envia link ao jogador ───────────────────────
 local function sendToken(player)
     local serial = getPlayerSerial(player)
-    local token  = hash("sha256", serial .. tostring(os.time()) .. tostring(math.random(1,999999))):sub(1,32)
+    local token  = hash("sha256", serial .. tostring(os.time()) .. tostring(math.random(1, 999999))):sub(1, 32)
     postToSite("/api/player/token", {serial=serial, token=token, expiresIn=300}, function(data)
         if data and data.success then
             local link = MTA_STORE_SITE_URL .. "/entrar?t=" .. token
@@ -79,7 +136,7 @@ addEventHandler("onPlayerLogin", root, function()
     local player = source
     setTimer(function()
         if isElement(player) then
-            syncPlayer(player)
+            fetchAndSync(player)
             sendToken(player)
         end
     end, 2000, 1)
@@ -96,16 +153,16 @@ end)
 addEventHandler("onPlayerWasted", root, function()
     local player = source
     setTimer(function()
-        if isElement(player) then syncPlayer(player) end
+        if isElement(player) then fetchAndSync(player) end
     end, 1000, 1)
 end)
 
--- Sync periodico
+-- Sync periodico de todos os jogadores online
 setTimer(function()
-    for _, p in ipairs(getElementsByType("player")) do
-        local ref = p
+    for _, player in ipairs(getElementsByType("player")) do
+        local p = player
         setTimer(function()
-            if isElement(ref) then syncPlayer(ref) end
+            if isElement(p) then fetchAndSync(p) end
         end, math.random(500, 3000), 1)
     end
 end, SYNC_INTERVAL * 1000, 0)
@@ -126,6 +183,13 @@ addCommandHandler("loja",  cmdLoja, false, false)
 addCommandHandler("store", cmdLoja, false, false)
 addCommandHandler("shop",  cmdLoja, false, false)
 
+-- Conecta ao iniciar
 addEventHandler("onResourceStart", resourceRoot, function()
-    log("Iniciado via elementData. /loja | /store | /shop")
+    connectDB()
+    log("Sync iniciado. /loja | /store | /shop")
+end)
+
+addEventHandler("onResourceStop", resourceRoot, function()
+    if db then dbClose(db); db = nil end
+    log("Sync parado.")
 end)
