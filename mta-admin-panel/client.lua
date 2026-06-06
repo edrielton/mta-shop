@@ -43,7 +43,12 @@ addEventHandler("mta_admin:show", root, function(url, token)
             localUrl = getResourceURL(getThisResource()) .. "panel.html"
         else
             -- fallback: tenta o arquivo estático servido pelo backend
-            localUrl = tostring(url) .. "/mta-admin-panel/panel.html"
+            -- Importante: MTA costuma falhar com HTTPS, então tentamos HTTP.
+            local base = tostring(url)
+            if base:sub(1, 8) == "https://" then
+                base = "http://" .. base:sub(9)
+            end
+            localUrl = base .. "/mta-admin-panel/panel.html"
         end
         outputChatBox("[Admin Panel] url local=" .. tostring(localUrl), 255, 220, 50)
 
