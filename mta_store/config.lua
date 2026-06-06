@@ -1,5 +1,4 @@
 -- MTA STORE - config.lua
--- Configure antes de iniciar o resource
 
 -- Token secreto: igual ao do painel Admin > Configuracoes MTA
 MTA_STORE_TOKEN = "seu-token-secreto-aqui"
