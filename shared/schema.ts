@@ -16,7 +16,8 @@ export const users = pgTable("users", {
   isVip: boolean("is_vip").default(false),
   vipExpiresAt: timestamp("vip_expires_at"),
   coinBalance: integer("coin_balance").default(0),
-  stripeCustomerId: text("stripe_customer_id"),
+  mpCustomerId: text("mp_customer_id"),
+
   createdAt: timestamp("created_at").defaultNow(),
 
   // ── SEGURANÇA ──────────────────────────────────────────────────
@@ -69,8 +70,10 @@ export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   productId: varchar("product_id").references(() => products.id),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
-  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  mpPaymentId: text("mp_payment_id"),
+  mpPreferenceId: text("mp_preference_id"),
+  mpExternalReference: text("mp_external_reference"),
+
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: text("currency").default("BRL"),
   status: text("status").notNull().default("pending"),
@@ -184,13 +187,15 @@ export const systemLogsRelations = relations(systemLogs, ({ one }) => ({
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true, createdAt: true, isAdmin: true, isVip: true, vipExpiresAt: true,
-  coinBalance: true, stripeCustomerId: true, failedLoginAttempts: true,
+  coinBalance: true, mpCustomerId: true, failedLoginAttempts: true,
+
   lockedUntil: true, isSuspended: true, suspendedReason: true,
   lastLoginAt: true, lastLoginIp: true,
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true, updatedAt: true });
+
 export const insertSystemLogSchema = createInsertSchema(systemLogs).omit({ id: true, createdAt: true });
 export const insertMtaSettingsSchema = createInsertSchema(mtaSettings).omit({
   id: true, createdAt: true, updatedAt: true, lastHealthCheck: true, healthStatus: true,

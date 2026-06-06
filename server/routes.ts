@@ -416,9 +416,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       req.session.userId = user.id;
 
-// (removido) console.warn com detalhes sensíveis de sessão
-      
-
       // Registra sessão no banco
       await storage.createSession({
         userId: user.id,
@@ -440,10 +437,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ user: safeUser });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
-      console.error("Login error:", error);
-      res.status(500).json({ message: "Falha no login" });
+
+      const err = error as any;
+      // Observabilidade: mostra stack e contexto mínimo (sem senha)
+      console.error("[Auth/Login] Fatal error", {
+        username: (req.body as any)?.username,
+        hasSessionId: Boolean((req as any)?.sessionID),
+        sessionID: (req as any)?.sessionID ? String((req as any).sessionID) : undefined,
+        errorMessage: err?.message,
+        errorName: err?.name,
+        stack: err?.stack,
+      });
+
+      const isProd = process.env.NODE_ENV === "production";
+      if (isProd) return res.status(500).json({ message: "Falha no login" });
+      return res.status(500).json({ message: `Falha no login: ${err?.message || "Internal error"}` });
     }
   });
+
 
   // Logout
   app.post("/api/auth/logout", async (req, res) => {
