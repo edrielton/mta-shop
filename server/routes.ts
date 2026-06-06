@@ -326,7 +326,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Aplica verificação de conta em todas as rotas autenticadas
   app.use("/api/user", requireAuth, requireActiveAccount);
-  app.use("/api/checkout", requireActiveAccount);
+  // Checkout: não exigir hidratação completa de conta/atividade antes de criar a ordem.
+  // A validação de conta (suspensa/bloqueada) já acontece dentro do handler do checkout.
+  // Isso evita 401 quando a sessão ainda não hidrata corretamente.
+
   app.use("/api/admin", requireActiveAccount);
 
   // MTA resources (no cookie session). Não bloquear /api/player e /api/mta.

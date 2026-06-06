@@ -20,6 +20,9 @@ export function serveMtaAdminPanelStatic(app: Express) {
     const html = fs.readFileSync(panelPath, "utf-8");
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Content-Length", Buffer.byteLength(html).toString());
 
     // debug: também loga alguns headers e status
     console.log("[MTA-Admin Static] panel.html", {
