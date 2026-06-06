@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS "users" (
     "is_vip"                BOOLEAN       NOT NULL DEFAULT FALSE,
     "vip_expires_at"        TIMESTAMP,
     "coin_balance"          INTEGER       NOT NULL DEFAULT 0,
-    "stripe_customer_id"    TEXT,
+    "mp_customer_id"       TEXT,
     "created_at"            TIMESTAMP     NOT NULL DEFAULT NOW(),
     -- Segurança
     "failed_login_attempts" INTEGER       NOT NULL DEFAULT 0,
