@@ -1,7 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import {
   loginSchema, registerSchema, insertProductSchema, changePasswordSchema
 } from "@shared/schema";
@@ -11,8 +10,8 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import crypto from "crypto";
 import { broadcastPlayerData, broadcastAdmin } from "./websocket";
-
 import { hashSessionToken, parseDeviceName, detectSuspiciousActivity, getRealIp } from "./security";
+import { getPaymentClient, getPreferenceClient, getMercadoPagoPublicKey } from "./mercadopagoClient";
 
 
 
@@ -182,16 +181,19 @@ async function sendMtaActivation(
   }
 }
 
-// ============ PROCESS PAYMENT (centralizado) ============
+// ============ PROCESS PIX PAYMENT (confirmação manual pelo admin) ============
 
-async function processCompletedPayment(stripeSessionId: string, paymentIntentId: string | null) {
-  const transaction = await storage.getTransactionByStripeSession(stripeSessionId);
-  if (!transaction || transaction.status === "completed") return;
+/**
+ * Processa um pagamento PIX confirmado.
+ * Como não há webhook automático para PIX nativo, a confirmação é feita
+ * pelo admin via POST /api/admin/transactions/:id/confirm ou por integração futura.
+ */
+export async function processPixPayment(transactionId: string): Promise<{ success: boolean; error?: string }> {
+  const transaction = await storage.getTransaction(transactionId);
+  if (!transaction) return { success: false, error: "Transação não encontrada" };
+  if (transaction.status === "completed") return { success: true }; // idempotente
 
-  await storage.updateTransaction(transaction.id, {
-    status: "completed",
-    stripePaymentIntentId: paymentIntentId ?? undefined,
-  });
+  await storage.updateTransaction(transaction.id, { status: "completed" });
 
   if (transaction.productId) {
     const activationResult = await sendMtaActivation(transaction.id, transaction.userId, transaction.productId);
@@ -209,7 +211,10 @@ async function processCompletedPayment(stripeSessionId: string, paymentIntentId:
       userId: transaction.userId,
       transactionId: transaction.id,
     });
+    return activationResult;
   }
+
+  return { success: true };
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -306,47 +311,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // MTA resources (no cookie session). Não bloquear /api/player e /api/mta.
   app.use("/api/player", (_req: Request, _res: Response, next: NextFunction) => next());
   app.use("/api/mta", (_req: Request, _res: Response, next: NextFunction) => next());
-
-
-  // ============ STRIPE WEBHOOK ============
-
-  app.post("/api/checkout/webhook", async (req: any, res) => {
-    const sig = req.headers["stripe-signature"] as string;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    let event: any;
-
-    try {
-      const stripe = await getUncachableStripeClient();
-      if (!webhookSecret || !sig) {
-        return res.status(400).json({ message: "Webhook misconfigured" });
-      }
-
-      if (!req.rawBody || !(req.rawBody instanceof Buffer)) {
-        return res.status(400).json({ message: "Webhook rawBody missing" });
-      }
-
-      event = stripe.webhooks.constructEvent(req.rawBody as Buffer, sig, webhookSecret);
-    } catch (err) {
-      return res.status(400).json({ message: "Webhook signature invalid" });
-    }
-
-    try {
-      if (event.type === "checkout.session.completed") {
-        const s = event.data.object;
-        if (s.payment_status === "paid") await processCompletedPayment(s.id, s.payment_intent);
-      } else if (event.type === "payment_intent.payment_failed") {
-        const pi = event.data.object;
-        await storage.createLog({
-          type: "payment", level: "error",
-          message: `Pagamento falhou: ${pi.last_payment_error?.message || "desconhecido"}`,
-        });
-      }
-      res.json({ received: true });
-    } catch (error) {
-      console.error("[Webhook] Error:", error);
-      res.status(500).json({ message: "Webhook processing failed" });
-    }
-  });
 
   // ============ AUTH ROUTES ============
 
@@ -688,178 +652,294 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ============ CHECKOUT ROUTES ============
+  // ============ CHECKOUT — MERCADO PAGO ============
 
-  app.get("/api/stripe/publishable-key", async (req, res) => {
+  // Retorna a public key para o frontend
+  app.get("/api/checkout/public-key", (_req, res) => {
     try {
-      const key = await getStripePublishableKey();
-      res.json({ publishableKey: key });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to get Stripe key" });
+      res.json({ publicKey: getMercadoPagoPublicKey() });
+    } catch {
+      res.status(500).json({ message: "Chave pública não configurada." });
     }
   });
 
-  // PIX checkout (gera QR EMV dinâmico por transação)
-  app.post("/api/checkout", requireAuth, rateLimit(3, 60 * 1000, true), async (req, res) => {
+  /**
+   * POST /api/checkout/pix
+   * Cria um pagamento PIX via Mercado Pago.
+   * O MP gera o QR Code e confirma automaticamente via webhook.
+   */
+  app.post("/api/checkout/pix", requireAuth, rateLimit(3, 60 * 1000, true), async (req, res) => {
     try {
       const { productId } = req.body;
       if (!productId || typeof productId !== "string") {
-        return res.status(400).json({ message: "Product ID is required" });
+        return res.status(400).json({ message: "Product ID é obrigatório" });
       }
 
       const product = await storage.getProduct(productId);
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      if (!product.isActive) return res.status(400).json({ message: "Product is not available" });
+      if (!product) return res.status(404).json({ message: "Produto não encontrado" });
+      if (!product.isActive) return res.status(400).json({ message: "Produto indisponível" });
       if (product.stockQuantity !== null && product.stockQuantity !== undefined && product.stockQuantity <= 0) {
         return res.status(400).json({ message: "Produto fora de estoque" });
       }
 
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "User not found" });
-
+      if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
       if (user.isSuspended) {
-        return res.status(403).json({ message: "Conta suspensa. Compra não autorizada.", code: "ACCOUNT_SUSPENDED" });
+        return res.status(403).json({ message: "Conta suspensa.", code: "ACCOUNT_SUSPENDED" });
       }
 
-      const userStats = await storage.getUserStats(user.id);
       const purchaseAmount = parseFloat(product.price);
       const purchaseIp = getRealIp(req);
 
       const suspicion = detectSuspiciousActivity({
-        purchaseIp,
-        lastLoginIp: user.lastLoginIp,
-        userCreatedAt: user.createdAt,
-        purchaseAmount,
-        userTotalPurchases: userStats.totalPurchases,
+        purchaseIp, lastLoginIp: user.lastLoginIp,
+        userCreatedAt: user.createdAt, purchaseAmount,
+        userTotalPurchases: (await storage.getUserStats(user.id)).totalPurchases,
       });
 
       if (suspicion.suspicious) {
         await storage.createLog({
           type: "security", level: "warn",
-          message: `Compra suspeita detectada: ${suspicion.reason}`,
+          message: `Compra suspeita: ${suspicion.reason}`,
           userId: user.id, ipAddress: purchaseIp,
           metadata: { productId, amount: purchaseAmount },
         });
       }
 
-      // Criar transação primeiro (gera ID que entra no QR)
-      // Dados Pix vindos de variáveis de ambiente — nunca hardcoded
-      const chavePix   = process.env.PIX_KEY      || "";
-      const recebedor  = process.env.PIX_RECIPIENT || "";
-      const uf         = process.env.PIX_UF        || "";
-
-      if (!chavePix || !recebedor || !uf) {
-        console.error("[Checkout] Variáveis PIX_KEY, PIX_RECIPIENT ou PIX_UF não configuradas.");
-        return res.status(500).json({ message: "Configuração de pagamento incompleta. Contate o suporte." });
-      }
-
+      // Cria a transação no banco primeiro para ter o ID como referência externa
       const tx = await storage.createTransaction({
         userId: user.id,
         productId: product.id,
-        stripeCheckoutSessionId: undefined,
         amount: product.price,
-        currency: product.currency || "BRL",
+        currency: "BRL",
         status: "pending",
         paymentMethod: "pix",
         purchaseIp,
         isSuspicious: suspicion.suspicious,
         suspiciousReason: suspicion.reason,
-        metadata: { pix: { chave: chavePix, recebedor, uf } },
       } as any);
 
-      const txAmount = purchaseAmount;
+      // Chama a API do Mercado Pago para criar o pagamento PIX
+      const paymentClient = getPaymentClient();
+      const mpPayment = await paymentClient.create({
+        body: {
+          transaction_amount: purchaseAmount,
+          description: product.name,
+          payment_method_id: "pix",
+          payer: {
+            email: user.email,
+            first_name: user.username,
+          },
+          external_reference: tx.id, // nossa transação como referência
+          notification_url: `${process.env.APP_URL}/api/checkout/webhook`,
+        },
+      });
 
-      // Helpers EMV Pix (dinâmico)
-      const pad2 = (n: number) => String(n).padStart(2, "0");
-      const formatAmount = (v: number) => v.toFixed(2).replace(".", "");
-      const tlv = (id: string, value: string) => {
-        const len = String(value).length;
-        return `${id}${pad2(len)}${value}`;
-      };
-
-      const merchantAccountInfo = (() => {
-        // Campo 00: GUI obrigatório pela spec Banco Central
-        const a00 = tlv("00", "br.gov.bcb.pix");
-        // Campo 01: chave Pix
-        const a01 = tlv("01", chavePix);
-        const sub = `${a00}${a01}`;
-        // tag 26 (Merchant Account Information)
-        return tlv("26", sub);
-      })();
-
-      const merchantCategoryCode = tlv("52", "0000");
-      const transactionCurrency = tlv("53", "986"); // BRL
-      const transactionAmount = tlv("54", formatAmount(txAmount));
-      const countryCode = tlv("58", "BR");
-
-      const merchantName = tlv("59", recebedor.slice(0, 25));
-      const merchantCity = tlv("60", uf);
-
-      const additionalDataFieldTemplate = (() => {
-        // 05 ID transação (txid — máx 25 chars)
-        const txid = tlv("05", tx.id.replace(/-/g, "").slice(0, 25));
-        // tag 62
-        return tlv("62", txid);
-      })();
-
-      const crc = (() => {
-        const payload = `000201${merchantAccountInfo}${merchantCategoryCode}${transactionCurrency}${transactionAmount}${countryCode}${merchantName}${merchantCity}${additionalDataFieldTemplate}6304`;
-        // CRC16-CCITT (polinômio 0x1021, init 0xFFFF)
-        let crcVal = 0xFFFF;
-        for (let i = 0; i < payload.length; i++) {
-          crcVal ^= payload.charCodeAt(i) << 8;
-          for (let j = 0; j < 8; j++) {
-            if (crcVal & 0x8000) crcVal = (crcVal << 1) ^ 0x1021;
-            else crcVal = crcVal << 1;
-            crcVal &= 0xFFFF;
-          }
-        }
-        return crcVal.toString(16).toUpperCase().padStart(4, "0");
-      })();
-
-      const pixEmv = `000201${merchantAccountInfo}${merchantCategoryCode}${transactionCurrency}${transactionAmount}${countryCode}${merchantName}${merchantCity}${additionalDataFieldTemplate}6304${crc}`;
+      // Salva o ID do pagamento MP na transação
+      await storage.updateTransaction(tx.id, {
+        mpPaymentId: String(mpPayment.id),
+        mpExternalReference: tx.id,
+      } as any);
 
       await storage.createLog({
         type: "payment", level: "info",
-        message: `Checkout PIX criado: ${product.name} (tx ${tx.id.slice(0, 8)})`,
+        message: `PIX MP criado: ${product.name} — MP#${mpPayment.id}`,
         userId: user.id,
-        metadata: { productId: product.id, txId: tx.id },
+        transactionId: tx.id,
+        metadata: { mpPaymentId: mpPayment.id },
       });
+
+      const pixData = mpPayment.point_of_interaction?.transaction_data;
 
       res.json({
         paymentMethod: "pix",
         transactionId: tx.id,
-        pixEmv,
+        mpPaymentId: mpPayment.id,
+        pixQrCode: pixData?.qr_code,           // string EMV copia-e-cola
+        pixQrCodeBase64: pixData?.qr_code_base64, // imagem QR pronta
         amount: product.price,
-        currency: product.currency || "BRL",
-        // ATENÇÃO: o pagamento PIX não é confirmado automaticamente.
-        // A ativação MTA só ocorre após o admin confirmar o pagamento manualmente
-        // via POST /api/admin/transactions/:id/retry ou integração com webhook Pix.
-        requiresManualConfirmation: true,
+        expiresAt: mpPayment.date_of_expiration,
       });
     } catch (error) {
-      console.error("Checkout error:", error);
-      res.status(500).json({ message: "Failed to create PIX checkout" });
+      console.error("[Checkout PIX] Erro:", error);
+      res.status(500).json({ message: "Falha ao criar pagamento PIX" });
     }
   });
 
-  app.get("/api/checkout/verify", requireAuth, async (req, res) => {
+  /**
+   * POST /api/checkout/card
+   * Cria uma Preference do Checkout Pro (cartão, PIX, boleto via link MP).
+   * Retorna um link de redirecionamento para o ambiente seguro do MP.
+   */
+  app.post("/api/checkout/card", requireAuth, rateLimit(3, 60 * 1000, true), async (req, res) => {
     try {
-      const sessionId = req.query.session_id as string;
-      if (!sessionId) return res.status(400).json({ message: "Session ID required" });
-
-      const stripe = await getUncachableStripeClient();
-      const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (stripeSession.payment_status === "paid") {
-        await processCompletedPayment(sessionId, stripeSession.payment_intent as string | null);
-        const transaction = await storage.getTransactionByStripeSession(sessionId);
-        return res.json(transaction || { status: "completed" });
+      const { productId } = req.body;
+      if (!productId || typeof productId !== "string") {
+        return res.status(400).json({ message: "Product ID é obrigatório" });
       }
 
-      res.json({ status: stripeSession.payment_status });
+      const product = await storage.getProduct(productId);
+      if (!product) return res.status(404).json({ message: "Produto não encontrado" });
+      if (!product.isActive) return res.status(400).json({ message: "Produto indisponível" });
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
+      if (user.isSuspended) {
+        return res.status(403).json({ message: "Conta suspensa.", code: "ACCOUNT_SUSPENDED" });
+      }
+
+      const purchaseAmount = parseFloat(product.price);
+      const purchaseIp = getRealIp(req);
+
+      const suspicion = detectSuspiciousActivity({
+        purchaseIp, lastLoginIp: user.lastLoginIp,
+        userCreatedAt: user.createdAt, purchaseAmount,
+        userTotalPurchases: (await storage.getUserStats(user.id)).totalPurchases,
+      });
+
+      const tx = await storage.createTransaction({
+        userId: user.id,
+        productId: product.id,
+        amount: product.price,
+        currency: "BRL",
+        status: "pending",
+        paymentMethod: "card",
+        purchaseIp,
+        isSuspicious: suspicion.suspicious,
+        suspiciousReason: suspicion.reason,
+      } as any);
+
+      const preferenceClient = getPreferenceClient();
+      const appUrl = process.env.APP_URL || "http://localhost:5000";
+
+      const preference = await preferenceClient.create({
+        body: {
+          items: [{
+            id: product.id,
+            title: product.name,
+            description: product.description || product.name,
+            quantity: 1,
+            currency_id: "BRL",
+            unit_price: purchaseAmount,
+          }],
+          payer: { email: user.email, name: user.username },
+          external_reference: tx.id,
+          notification_url: `${appUrl}/api/checkout/webhook`,
+          back_urls: {
+            success: `${appUrl}/checkout/success?tx=${tx.id}`,
+            failure: `${appUrl}/checkout/cancel?tx=${tx.id}`,
+            pending: `${appUrl}/checkout/success?tx=${tx.id}`,
+          },
+          auto_return: "approved",
+        },
+      });
+
+      await storage.updateTransaction(tx.id, {
+        mpPreferenceId: preference.id,
+        mpExternalReference: tx.id,
+      } as any);
+
+      await storage.createLog({
+        type: "payment", level: "info",
+        message: `Checkout Pro criado: ${product.name} — pref ${preference.id}`,
+        userId: user.id, transactionId: tx.id,
+      });
+
+      res.json({
+        paymentMethod: "card",
+        transactionId: tx.id,
+        preferenceId: preference.id,
+        checkoutUrl: preference.init_point,       // produção
+        sandboxUrl: preference.sandbox_init_point, // testes
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to verify checkout" });
+      console.error("[Checkout Card] Erro:", error);
+      res.status(500).json({ message: "Falha ao criar sessão de pagamento" });
+    }
+  });
+
+  /**
+   * POST /api/checkout/webhook
+   * Recebe notificações IPN do Mercado Pago e confirma pagamentos automaticamente.
+   * Docs: https://www.mercadopago.com.br/developers/pt/docs/notifications/ipn
+   */
+  app.post("/api/checkout/webhook", async (req: any, res) => {
+    try {
+      const { type, data } = req.body;
+
+      // MP envia também query params ?topic=payment&id=xxx (IPN legado)
+      const topic = req.query.topic as string | undefined;
+      const queryId = req.query.id as string | undefined;
+
+      const paymentId = data?.id || queryId;
+      const eventType = type || topic;
+
+      if ((eventType === "payment" || eventType === "payment.updated") && paymentId) {
+        const paymentClient = getPaymentClient();
+        const mpPayment = await paymentClient.get({ id: String(paymentId) });
+
+        const externalRef = mpPayment.external_reference;
+        if (!externalRef) {
+          return res.status(200).json({ received: true }); // ignora sem referência
+        }
+
+        const transaction = await storage.getTransactionByExternalRef(externalRef);
+        if (!transaction) {
+          console.warn("[Webhook MP] Transação não encontrada:", externalRef);
+          return res.status(200).json({ received: true });
+        }
+
+        // Salva o ID do MP caso ainda não tenha (pagamentos via Checkout Pro)
+        if (!transaction.mpPaymentId) {
+          await storage.updateTransaction(transaction.id, {
+            mpPaymentId: String(mpPayment.id),
+          } as any);
+        }
+
+        const mpStatus = mpPayment.status; // approved | pending | rejected | cancelled
+
+        if (mpStatus === "approved" && transaction.status !== "completed") {
+          await processPixPayment(transaction.id);
+          await storage.createLog({
+            type: "payment", level: "info",
+            message: `Pagamento MP aprovado automaticamente: tx ${transaction.id} / MP#${mpPayment.id}`,
+            transactionId: transaction.id,
+          });
+        } else if (mpStatus === "rejected" || mpStatus === "cancelled") {
+          await storage.updateTransaction(transaction.id, { status: "failed" } as any);
+          await storage.createLog({
+            type: "payment", level: "warn",
+            message: `Pagamento MP ${mpStatus}: tx ${transaction.id}`,
+            transactionId: transaction.id,
+          });
+        }
+      }
+
+      res.status(200).json({ received: true });
+    } catch (error) {
+      console.error("[Webhook MP] Erro:", error);
+      // Sempre 200 para o MP não retentar indefinidamente em erros nossos
+      res.status(200).json({ received: true, error: "internal" });
+    }
+  });
+
+  // Consulta status de uma transação pelo ID
+  app.get("/api/checkout/status/:transactionId", requireAuth, async (req, res) => {
+    try {
+      const tx = await storage.getTransaction(req.params.transactionId);
+      if (!tx) return res.status(404).json({ message: "Transação não encontrada" });
+      if (tx.userId !== req.session.userId) return res.status(403).json({ message: "Acesso negado" });
+      res.json({
+        id: tx.id,
+        status: tx.status,
+        mtaActivationStatus: tx.mtaActivationStatus,
+        paymentMethod: tx.paymentMethod,
+        mpPaymentId: tx.mpPaymentId,
+        amount: tx.amount,
+        createdAt: tx.createdAt,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Falha ao consultar transação" });
     }
   });
 
@@ -949,6 +1029,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ success: result.success, error: result.error });
     } catch (error) {
       res.status(500).json({ message: "Failed to retry activation" });
+    }
+  });
+
+  // Confirmação manual de pagamento PIX pelo admin
+  app.post("/api/admin/transactions/:id/confirm-pix", requireAdmin, async (req, res) => {
+    try {
+      const result = await processPixPayment(req.params.id);
+      if (!result.success) return res.status(400).json({ message: result.error });
+
+      await storage.createLog({
+        type: "payment", level: "info",
+        message: `Admin confirmou pagamento PIX: transação ${req.params.id}`,
+        userId: req.session.userId,
+        transactionId: req.params.id,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Falha ao confirmar pagamento" });
     }
   });
 

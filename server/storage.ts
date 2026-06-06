@@ -46,7 +46,8 @@ export interface IStorage {
 
   // Transactions
   getTransaction(id: string): Promise<Transaction | undefined>;
-  getTransactionByStripeSession(sessionId: string): Promise<Transaction | undefined>;
+  getTransactionByMpPayment(mpPaymentId: string): Promise<Transaction | undefined>;
+  getTransactionByExternalRef(externalRef: string): Promise<Transaction | undefined>;
   getUserTransactions(userId: string): Promise<Transaction[]>;
   getAllTransactions(): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
@@ -309,11 +310,19 @@ export class DatabaseStorage implements IStorage {
     return tx || undefined;
   }
 
-  async getTransactionByStripeSession(sessionId: string): Promise<Transaction | undefined> {
+  async getTransactionByMpPayment(mpPaymentId: string): Promise<Transaction | undefined> {
     const [tx] = await db
       .select()
       .from(transactions)
-      .where(eq(transactions.stripeCheckoutSessionId, sessionId));
+      .where(eq(transactions.mpPaymentId, mpPaymentId));
+    return tx || undefined;
+  }
+
+  async getTransactionByExternalRef(externalRef: string): Promise<Transaction | undefined> {
+    const [tx] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.mpExternalReference, externalRef));
     return tx || undefined;
   }
 
