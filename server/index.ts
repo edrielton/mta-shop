@@ -105,8 +105,8 @@ app.use((req, res, next) => {
   httpServer.listen(
     {
       port,
-      host: "127.0.0.1",
-
+      // precisa aceitar conexões vindas do container/host do proxy (não localhost)
+      host: "0.0.0.0",
       reusePort: true,
     },
     () => {
