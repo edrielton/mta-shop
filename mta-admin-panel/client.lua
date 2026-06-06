@@ -42,14 +42,8 @@ addEventHandler("mta_admin:show", root, function(url, token)
         if getResourceURL then
             localUrl = getResourceURL(getThisResource()) .. "panel.html"
         else
-            -- fallback: tenta um caminho comum de servidor web do MTA
-            -- (ajuste se seu host servir arquivos de resource por outra rota)
-            local resName = getResourceName(getThisResource())
-            -- endpoint HTTP do painel no site
-            -- conforme sua confirmação: https://mtastore.site/admin
-            localUrl = tostring(url) .. "/admin"
-
-
+            -- fallback: tenta o arquivo estático servido pelo backend
+            localUrl = tostring(url) .. "/mta-admin-panel/panel.html"
         end
         outputChatBox("[Admin Panel] url local=" .. tostring(localUrl), 255, 220, 50)
 

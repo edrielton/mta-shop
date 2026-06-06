@@ -1,11 +1,7 @@
 # TODO
 
-- [ ] Fix duplicate unlock route in `server/routes.ts` and ensure only one handler remains.
-- [x] Remove duplicated `POST /api/admin/users/:id/unlock` handler from `server/routes.ts`.
-- [x] Fix Express error middleware to avoid `ERR_HTTP_HEADERS_SENT`.
-- [x] Fix TypeScript Stripe apiVersion type mismatch in `server/stripeClient.ts`.
-- [ ] Continue debugging session cookie refresh/logout + 401 `Not authenticated` (likely cookie domain/secure/sameSite).
+- [x] Update `Dockerfile` production stage to copy `mta-admin-panel/panel.html` into the final image so `server/mtaAdminStatic.ts` can find it.
 
-- [ ] After fixes, run `npm run check` / `npm run build` and verify runtime behavior.
-- [ ] Create a git commit and open a PR.
+- [ ] (Optional) Add a fallback lookup for `panel.html` inside `server/mtaAdminStatic.ts`.
+- [ ] Rebuild Docker image and verify `GET /admin` returns HTML (no startup throw).
 
