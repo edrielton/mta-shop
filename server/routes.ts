@@ -305,6 +305,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       req.session.userId = user.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
 
       // Registra sessão
       await storage.createSession({
@@ -384,10 +387,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lastLoginIp: req.ip,
       });
 
+      // Salva userId na sessão e força gravação no PgStore ANTES de responder
       req.session.userId = user.id;
-
-// (removido) console.warn com detalhes sensíveis de sessão
-      
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
 
       // Registra sessão no banco
       await storage.createSession({
