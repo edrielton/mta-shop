@@ -254,13 +254,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       rolling: true,             // renova o cookie a cada requisição
       cookie: {
         // HTTPS obrigatório quando sameSite="none".
-        // Em produção, sempre secure=true. Nunca permitir override via env em prod.
+        // Em dev/localhost, não force sameSite="none" e nem domain fixo.
         secure: isProd ? true : process.env.SESSION_COOKIE_SECURE !== "false",
         httpOnly: true,
-        sameSite: "none",
         maxAge: sessionTTL * 1000,
-        // Usamos domain fixo para compartilhar sessão entre subdomínios sob mtastore.site.
-        domain: ".mtastore.site",
+
+        // No browser, cookie de sessão precisa bater com o domínio/rota atual.
+        // Forçar domain=".mtastore.site" em localhost quebra o envio do cookie.
+        ...(isProd
+          ? {
+              sameSite: "none" as const,
+              // Usamos domain fixo para compartilhar sessão entre subdomínios sob mtastore.site.
+              domain: ".mtastore.site" as const,
+            }
+          : {
+              sameSite: "lax" as const,
+            }),
       },
     })
   );
