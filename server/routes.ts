@@ -219,22 +219,22 @@ export async function processPixPayment(transactionId: string): Promise<{ succes
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const isProd = process.env.NODE_ENV === "production";
-  const sessionTTL = 7 * 24 * 60 * 60; // 7 dias em segundos
+  const sessionTTL = 7 * 24 * 60 * 60 * 1000; // 7 dias em ms
 
-  // Session store: sempre PostgreSQL quando DATABASE_URL existir
+  // Session store PostgreSQL
   const PgStore = connectPgSimple(session);
   const sessionStore = process.env.DATABASE_URL
     ? new PgStore({
         conString: process.env.DATABASE_URL,
         tableName: "user_sessions_store",
         createTableIfMissing: true,
-        ttl: sessionTTL,
+        ttl: Math.floor(sessionTTL / 1000),
         pruneSessionInterval: 60 * 60,
         errorLog: (err: any) => console.error("[SessionStore]", err),
       })
     : undefined;
 
-  console.log("[Session] Store:", sessionStore ? "PostgreSQL" : "MemoryStore (sem DATABASE_URL)");
+  console.log("[Session] Store:", sessionStore ? "PostgreSQL" : "MemoryStore");
 
   app.use(
     session({
@@ -245,28 +245,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saveUninitialized: false,
       rolling: true,
       cookie: {
-        secure: false,      // deixa o browser aceitar em qualquer contexto
+        // HTTPS em prod, HTTP em dev. Com trust proxy, req.secure é true no Railway.
+        secure: isProd,
         httpOnly: true,
-        sameSite: "lax",
-        maxAge: sessionTTL * 1000,
+        sameSite: isProd ? "none" : "lax",
+        maxAge: sessionTTL,
       },
     })
   );
 
+  // Middleware: aceita sessão via cookie OU via header X-Session-Token
+  // Isso resolve o problema de cookies bloqueados em alguns proxies
+  app.use(async (req: Request, _res: Response, next: NextFunction) => {
+    // Se já tem userId na sessão (cookie funcionou), segue
+    if (req.session?.userId) return next();
 
+    // Tenta via header X-Session-Token (fallback para quando cookies falham)
+    const tokenHeader = req.headers["x-session-token"] as string | undefined;
+    if (tokenHeader) {
+      try {
+        const sessionRow = await storage.getSession(hashSessionToken(tokenHeader));
+        if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
+          req.session.userId = sessionRow.userId;
+        }
+      } catch { /* ignora erros */ }
+    }
+
+    next();
+  });
 
   // Security headers
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("X-XSS-Protection", "1; mode=block");
     next();
   });
 
-
-  // ================= SESSION =================
-  // O express-session hidrata req.session via PgStore automaticamente.
-  // Rotas protegidas usam requireAuth que verifica req.session.userId.
   app.use("/api/user", requireAuth, requireActiveAccount);
   app.use("/api/admin", requireActiveAccount);
   app.use("/api/player", (_req: Request, _res: Response, next: NextFunction) => next());
@@ -296,10 +311,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       req.session.userId = user.id;
 
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashSessionToken(rawToken);
+
       // Registra sessão
       await storage.createSession({
         userId: user.id,
-        sessionToken: hashSessionToken(req.sessionID),
+        sessionToken: tokenHash,
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
         deviceName: parseDeviceName(req.get("user-agent")),
@@ -310,11 +328,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { password: _, ...safeUser } = user;
 
       req.session.save((err) => {
-        if (err) {
-          console.error("[Register] session.save error:", err);
-          return res.status(500).json({ message: "Falha ao salvar sessão" });
-        }
-        res.json({ user: safeUser });
+        if (err) console.error("[Register] session.save error:", err);
+        res.json({ user: safeUser, sessionToken: rawToken });
       });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
@@ -383,10 +398,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       req.session.userId = user.id;
 
+      // Gera token único para este login (fallback para quando cookie falha)
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashSessionToken(rawToken);
+
       // Registra sessão no banco
       await storage.createSession({
         userId: user.id,
-        sessionToken: hashSessionToken(req.sessionID),
+        sessionToken: tokenHash,
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
         deviceName: parseDeviceName(req.get("user-agent")),
@@ -402,14 +421,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const { password: _, ...safeUser } = user;
 
-      // Força gravação da sessão no PgStore antes de responder
-      // sem isso o cookie não é enviado ao browser em alguns ambientes
       req.session.save((err) => {
-        if (err) {
-          console.error("[Login] session.save error:", err);
-          return res.status(500).json({ message: "Falha ao salvar sessão" });
-        }
-        res.json({ user: safeUser });
+        if (err) console.error("[Login] session.save error:", err);
+        res.json({ user: safeUser, sessionToken: rawToken });
       });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
