@@ -308,7 +308,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const { password: _, ...safeUser } = user;
-      res.json({ user: safeUser });
+
+      req.session.save((err) => {
+        if (err) {
+          console.error("[Register] session.save error:", err);
+          return res.status(500).json({ message: "Falha ao salvar sessão" });
+        }
+        res.json({ user: safeUser });
+      });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
       console.error("Register error:", error);
@@ -394,7 +401,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const { password: _, ...safeUser } = user;
-      res.json({ user: safeUser });
+
+      // Força gravação da sessão no PgStore antes de responder
+      // sem isso o cookie não é enviado ao browser em alguns ambientes
+      req.session.save((err) => {
+        if (err) {
+          console.error("[Login] session.save error:", err);
+          return res.status(500).json({ message: "Falha ao salvar sessão" });
+        }
+        res.json({ user: safeUser });
+      });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
       console.error("Login error:", error);
@@ -1642,3 +1658,4 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
+
