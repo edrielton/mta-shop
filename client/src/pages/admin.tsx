@@ -67,10 +67,12 @@ function useAdminQuery<T>(key: string, enabled: boolean) {
     queryKey: [key],
     queryFn: async () => {
       const res = await fetch(key, { credentials: "include" });
+      if (res.status === 401) return null as T; // sessão expirou — não estoura
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
     enabled,
+    refetchOnWindowFocus: false, // evita refetch no foco antes da sessão ser validada
   });
 }
 
@@ -952,11 +954,13 @@ export default function AdminPage() {
     queryKey: ["/api/admin/stats"],
     queryFn: async () => {
       const res = await fetch("/api/admin/stats", { credentials: "include" });
+      if (res.status === 401) return null;
       if (!res.ok) return null;
       return res.json();
     },
     enabled: isAdmin,
     refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
   });
   const stats = statsData || {};
 

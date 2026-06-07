@@ -42,10 +42,9 @@ export const getQueryFn: <T>(options: {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Por padrão não lança em 401 — cada query específica decide
       queryFn: getQueryFn({ on401: "returnNull" }),
       refetchInterval: false,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false, // evita 401 ao voltar o foco antes da sessão ser validada
       staleTime: 5 * 60 * 1000,
       retry: false,
     },
