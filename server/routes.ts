@@ -283,6 +283,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/player", (_req: Request, _res: Response, next: NextFunction) => next());
   app.use("/api/mta", (_req: Request, _res: Response, next: NextFunction) => next());
 
+  // ============ DIAGNÓSTICO (remover após resolver) ============
+  app.get("/api/debug", async (req, res) => {
+    const tokenHeader = req.headers["x-session-token"] as string | undefined;
+    const cookieHeader = req.headers["cookie"];
+    
+    let sessionFromToken = null;
+    if (tokenHeader) {
+      try {
+        sessionFromToken = await storage.getSession(hashSessionToken(tokenHeader));
+      } catch (e: any) { sessionFromToken = { error: e.message }; }
+    }
+
+    res.json({
+      sessionID: req.sessionID,
+      sessionUserId: req.session?.userId || null,
+      cookieHeader: cookieHeader || "NENHUM COOKIE",
+      tokenHeader: tokenHeader ? tokenHeader.slice(0, 16) + "..." : "NENHUM TOKEN",
+      sessionFromToken,
+      isProd: process.env.NODE_ENV === "production",
+      storeType: sessionStore ? "PostgreSQL" : "Memory",
+    });
+  });
+
   // ============ AUTH ROUTES ============
 
   // Registro
@@ -1683,4 +1706,3 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
-
