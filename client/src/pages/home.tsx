@@ -246,7 +246,7 @@ export default function Home() {
                 step: 2,
                 icon: <CreditCard className="h-8 w-8" />,
                 title: "Realize o Pagamento",
-                description: "Pague com segurança via Stripe, Pix ou cartão",
+                description: "Pague com segurança via Mercado Pago, Pix ou cartão",
               },
               {
                 step: 3,
@@ -359,7 +359,7 @@ export default function Home() {
             <div>
               <h5 className="font-semibold mb-4">Pagamento Seguro</h5>
               <div className="flex gap-2">
-                <Badge variant="secondary" className="text-xs">Stripe</Badge>
+                <Badge variant="secondary" className="text-xs">Mercado Pago</Badge>
                 <Badge variant="secondary" className="text-xs">Pix</Badge>
                 <Badge variant="secondary" className="text-xs">Cartão</Badge>
               </div>
