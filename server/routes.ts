@@ -962,7 +962,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ============ ADMIN ROUTES ============
+  /**
+   * POST /api/claim/:productId
+   * Resgata um item gratuito — sem pagamento, ativa direto no MTA.
+   * Cada usuário pode resgatar o mesmo item até claimLimit vezes (padrão: 1).
+   */
+  app.post("/api/claim/:productId", requireAuth, rateLimit(10, 60 * 1000, true), async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.productId);
+      if (!product) return res.status(404).json({ message: "Produto não encontrado" });
+      if (!product.isActive) return res.status(400).json({ message: "Produto indisponível" });
+      if (!product.isFree) return res.status(400).json({ message: "Este produto não é gratuito" });
+
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
+      if (user.isSuspended) return res.status(403).json({ message: "Conta suspensa" });
+
+      // Verifica limite de resgates por usuário
+      const claimLimit = product.claimLimit ?? 1;
+      const previousClaims = await storage.countUserClaimsForProduct(userId, product.id);
+      if (previousClaims >= claimLimit) {
+        return res.status(400).json({
+          message: claimLimit === 1
+            ? "Você já resgatou este item"
+            : `Limite de ${claimLimit} resgates atingido para este item`,
+        });
+      }
+
+      // Verifica estoque
+      if (product.stockQuantity !== null && product.stockQuantity !== undefined && product.stockQuantity <= 0) {
+        return res.status(400).json({ message: "Item esgotado" });
+      }
+
+      // Cria transação gratuita
+      const tx = await storage.createTransaction({
+        userId,
+        productId: product.id,
+        amount: "0.00",
+        currency: "BRL",
+        status: "completed",
+        paymentMethod: "free",
+        purchaseIp: getRealIp(req),
+        isSuspicious: false,
+      } as any);
+
+      // Ativa no servidor MTA
+      const activation = await sendMtaActivation(tx.id, userId, product.id);
+      await storage.updateTransaction(tx.id, {
+        mtaActivationStatus: activation.success ? "success" : "failed",
+        mtaActivationError: activation.error,
+        mtaActivationAttempts: 1,
+      } as any);
+
+      await storage.createLog({
+        type: "payment", level: "info",
+        message: `Resgate gratuito: ${product.name} por ${user.username}`,
+        userId, transactionId: tx.id,
+      });
+
+      res.json({
+        success: true,
+        transactionId: tx.id,
+        activated: activation.success,
+        message: activation.success
+          ? `"${product.name}" ativado com sucesso!`
+          : `Resgate registrado. A ativação será processada em breve.`,
+      });
+    } catch (error) {
+      console.error("[Claim]", error);
+      res.status(500).json({ message: "Falha ao resgatar item" });
+    }
+  });
 
   // Proteção de IP removida do middleware global (Cloudflare muda o IP)
   // A segurança é feita pelo requireAdmin (sessão + login)
@@ -1706,3 +1777,4 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
+

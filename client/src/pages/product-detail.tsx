@@ -157,6 +157,31 @@ export default function ProductDetailPage() {
     enabled: !!id,
   });
 
+  // Resgate gratuito
+  const claimMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const res = await apiRequest("POST", `/api/claim/${productId}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Falha ao resgatar");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: data.activated ? "🎁 Item ativado!" : "🎁 Resgate registrado!",
+        description: data.message,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao resgatar",
+        description: error instanceof Error ? error.message : "Tente novamente",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Checkout PIX — retorna QR Code do MP
   const pixMutation = useMutation({
     mutationFn: async (productId: string) => {
@@ -316,42 +341,60 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Botões de pagamento */}
+            {/* Botões de pagamento ou resgate */}
             <div className="space-y-3">
-              {/* PIX */}
-              <Button
-                size="lg"
-                className="w-full gap-2 text-lg h-14 bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => user ? pixMutation.mutate(product.id) : requireLogin()}
-                disabled={isPending}
-                data-testid="button-buy-pix"
-              >
-                {pixMutation.isPending ? (
-                  <><Loader2 className="h-5 w-5 animate-spin" /> Gerando PIX...</>
-                ) : (
-                  <><QrCode className="h-5 w-5" /> Pagar com PIX</>
-                )}
-              </Button>
+              {(product as any).isFree ? (
+                /* Item gratuito */
+                <Button
+                  size="lg"
+                  className="w-full gap-2 text-lg h-14 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => user ? claimMutation.mutate(product.id) : requireLogin()}
+                  disabled={claimMutation.isPending}
+                  data-testid="button-claim-free"
+                >
+                  {claimMutation.isPending ? (
+                    <><Loader2 className="h-5 w-5 animate-spin" /> Resgatando...</>
+                  ) : (
+                    <>🎁 Resgatar Grátis</>
+                  )}
+                </Button>
+              ) : (
+                /* Item pago */
+                <>
+                  <Button
+                    size="lg"
+                    className="w-full gap-2 text-lg h-14 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => user ? pixMutation.mutate(product.id) : requireLogin()}
+                    disabled={isPending}
+                    data-testid="button-buy-pix"
+                  >
+                    {pixMutation.isPending ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Gerando PIX...</>
+                    ) : (
+                      <><QrCode className="h-5 w-5" /> Pagar com PIX</>
+                    )}
+                  </Button>
 
-              {/* Cartão */}
-              <Button
-                size="lg"
-                variant="outline"
-                className="w-full gap-2 text-lg h-14"
-                onClick={() => user ? cardMutation.mutate(product.id) : requireLogin()}
-                disabled={isPending}
-                data-testid="button-buy-card"
-              >
-                {cardMutation.isPending ? (
-                  <><Loader2 className="h-5 w-5 animate-spin" /> Redirecionando...</>
-                ) : (
-                  <>
-                    <CreditCard className="h-5 w-5" />
-                    Pagar com Cartão
-                    <ExternalLink className="h-4 w-4 opacity-50" />
-                  </>
-                )}
-              </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full gap-2 text-lg h-14"
+                    onClick={() => user ? cardMutation.mutate(product.id) : requireLogin()}
+                    disabled={isPending}
+                    data-testid="button-buy-card"
+                  >
+                    {cardMutation.isPending ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Redirecionando...</>
+                    ) : (
+                      <>
+                        <CreditCard className="h-5 w-5" />
+                        Pagar com Cartão
+                        <ExternalLink className="h-4 w-4 opacity-50" />
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
             </div>
 
             {!user && (

@@ -21,6 +21,7 @@ export interface IStorage {
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getUserStats(userId: string): Promise<{ totalPurchases: number; totalSpent: number }>;
+  countUserClaimsForProduct(userId: string, productId: string): Promise<number>;
 
   // Security: account locking
   incrementFailedLogins(userId: string): Promise<{ attempts: number; locked: boolean }>;
@@ -131,6 +132,21 @@ export class DatabaseStorage implements IStorage {
 
     const totalSpent = userTxs.reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
     return { totalPurchases: userTxs.length, totalSpent };
+  }
+
+  async countUserClaimsForProduct(userId: string, productId: string): Promise<number> {
+    const claims = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          eq(transactions.productId, productId),
+          eq(transactions.paymentMethod, "free"),
+          eq(transactions.status, "completed"),
+        )
+      );
+    return claims.length;
   }
 
   // ── SECURITY: ACCOUNT LOCKING ──────────────────────────────────

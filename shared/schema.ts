@@ -53,13 +53,15 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku").notNull().unique(),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0"),
   currency: text("currency").default("BRL"),
   category: text("category").notNull(),
   imageUrl: text("image_url"),
   mtaCommand: text("mta_command").notNull(),
   mtaParams: jsonb("mta_params"),
   isActive: boolean("is_active").default(true),
+  isFree: boolean("is_free").default(false),           // item gratuito — não exige pagamento
+  claimLimit: integer("claim_limit"),                  // null = ilimitado, N = só N resgates por usuário
   stockQuantity: integer("stock_quantity"),
   createdAt: timestamp("created_at").defaultNow(),
 });

@@ -87,6 +87,7 @@ function ProductDialog({
   saving: boolean;
 }) {
   const [isActive, setIsActive] = useState(editing?.isActive ?? true);
+  const [isFree, setIsFree] = useState((editing as any)?.isFree ?? false);
   const [category, setCategory] = useState(editing?.category || "item");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -96,12 +97,14 @@ function ProductDialog({
       name:        fd.get("name") as string,
       description: fd.get("description") as string,
       sku:         fd.get("sku") as string,
-      price:       fd.get("price") as string,
+      price:       isFree ? "0.00" : fd.get("price") as string,
       category,
       mtaCommand:  fd.get("mtaCommand") as string,
       stockQuantity: fd.get("stockQuantity") ? parseInt(fd.get("stockQuantity") as string) : null,
+      claimLimit: isFree && fd.get("claimLimit") ? parseInt(fd.get("claimLimit") as string) : null,
       isActive,
-    });
+      isFree,
+    } as any);
   };
 
   return (
@@ -126,11 +129,26 @@ function ProductDialog({
             <Label htmlFor="description">Descrição</Label>
             <Textarea id="description" name="description" defaultValue={editing?.description || ""} rows={2} />
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="price">Preço (R$) *</Label>
-              <Input id="price" name="price" type="number" step="0.01" min="0" defaultValue={editing?.price || ""} required />
+
+          {/* Toggle gratuito */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <Switch id="isFree" checked={isFree} onCheckedChange={setIsFree} />
+            <div>
+              <Label htmlFor="isFree" className="cursor-pointer text-emerald-600 dark:text-emerald-400 font-medium">
+                🎁 Item Gratuito
+              </Label>
+              <p className="text-xs text-muted-foreground">Usuários resgatam sem pagar</p>
             </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            {!isFree && (
+              <div className="space-y-2">
+                <Label htmlFor="price">Preço (R$) *</Label>
+                <Input id="price" name="price" type="number" step="0.01" min="0"
+                  defaultValue={editing?.price || ""} required={!isFree} />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Categoria</Label>
               <Select value={category} onValueChange={setCategory}>
@@ -141,6 +159,7 @@ function ProductDialog({
                   <SelectItem value="coins">Moedas</SelectItem>
                   <SelectItem value="item">Item</SelectItem>
                   <SelectItem value="skin">Skin</SelectItem>
+                  <SelectItem value="free">Gratuito</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -149,13 +168,21 @@ function ProductDialog({
               <Input id="stockQuantity" name="stockQuantity" type="number" min="0"
                 defaultValue={editing?.stockQuantity ?? ""} placeholder="∞" />
             </div>
+            {isFree && (
+              <div className="space-y-2">
+                <Label htmlFor="claimLimit">Resgates/usuário</Label>
+                <Input id="claimLimit" name="claimLimit" type="number" min="1"
+                  defaultValue={(editing as any)?.claimLimit ?? 1} placeholder="1" />
+              </div>
+            )}
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="mtaCommand">Comando MTA *</Label>
             <Input id="mtaCommand" name="mtaCommand"
               placeholder="ex: giveVip30d, giveCarID32"
               defaultValue={editing?.mtaCommand || ""} required />
-            <p className="text-xs text-muted-foreground">Comando executado no servidor após pagamento confirmado</p>
+            <p className="text-xs text-muted-foreground">Comando executado no servidor após ativação</p>
           </div>
           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40">
             <Switch id="isActive" checked={isActive} onCheckedChange={setIsActive} />
