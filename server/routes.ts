@@ -61,8 +61,22 @@ export function clearRateLimitInterval() { clearInterval(rateLimitCleanupInterva
 // ============ AUTH MIDDLEWARE ============
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Authentication required" });
+  if (req.session?.userId) return next();
+  return res.status(401).json({ message: "Authentication required" });
+}
+
+// Middleware global que hidrata req.session.userId via cookie OU header X-Session-Token
+async function hydrateSession(req: Request, _res: Response, next: NextFunction) {
+  if (req.session?.userId) return next();
+
+  const tokenHeader = req.headers["x-session-token"] as string | undefined;
+  if (tokenHeader) {
+    try {
+      const sessionRow = await storage.getSession(hashSessionToken(tokenHeader));
+      if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
+        req.session.userId = sessionRow.userId;
+      }
+    } catch { /* ignora */ }
   }
   next();
 }
@@ -245,41 +259,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saveUninitialized: false,
       rolling: true,
       cookie: {
-        // HTTPS em prod, HTTP em dev. Com trust proxy, req.secure é true no Railway.
-        secure: isProd,
+        secure: false,   // NUNCA true — Cloudflare termina TLS, Railway recebe HTTP
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",
+        sameSite: "lax",
         maxAge: sessionTTL,
       },
     })
   );
 
   // Middleware: aceita sessão via cookie OU via header X-Session-Token
-  app.use(async (req: Request, _res: Response, next: NextFunction) => {
-    const tokenHeader = req.headers["x-session-token"] as string | undefined;
-
-    console.log(`[Auth] ${req.method} ${req.path} | cookie userId: ${req.session?.userId || "none"} | token header: ${tokenHeader ? tokenHeader.slice(0,8)+"..." : "none"}`);
-
-    // Se já tem userId na sessão (cookie funcionou), segue
-    if (req.session?.userId) return next();
-
-    // Tenta via header X-Session-Token
-    if (tokenHeader) {
-      try {
-        const hashed = hashSessionToken(tokenHeader);
-        console.log(`[Auth] Buscando sessão pelo token hash: ${hashed.slice(0,16)}...`);
-        const sessionRow = await storage.getSession(hashed);
-        console.log(`[Auth] Sessão encontrada:`, sessionRow ? `userId=${sessionRow.userId} revoked=${sessionRow.isRevoked}` : "NÃO ENCONTRADA");
-        if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
-          req.session.userId = sessionRow.userId;
-        }
-      } catch (e) {
-        console.error("[Auth] Erro ao buscar sessão:", e);
-      }
-    }
-
-    next();
-  });
+  app.use(hydrateSession);
 
   // Security headers
   app.use((_req, res, next) => {
@@ -462,11 +451,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Usuário atual
   app.get("/api/auth/me", async (req, res) => {
-    // Log temporário para diagnosticar sessão
-    console.log("[/api/auth/me] sessionID:", req.sessionID?.slice(0, 8), "userId:", req.session?.userId);
+    let userId = req.session?.userId;
 
-    if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
-    const user = await storage.getUser(req.session.userId);
+    // Fallback: verifica header X-Session-Token se não tem sessão
+    if (!userId) {
+      const tokenHeader = req.headers["x-session-token"] as string | undefined;
+      if (tokenHeader) {
+        try {
+          const sessionRow = await storage.getSession(hashSessionToken(tokenHeader));
+          if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
+            userId = sessionRow.userId;
+            req.session.userId = userId;
+          }
+        } catch { /* ignora */ }
+      }
+    }
+
+    console.log("[/api/auth/me] userId:", userId || "none");
+
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const user = await storage.getUser(userId);
     if (!user) return res.status(401).json({ message: "User not found" });
     const { password: _, ...safeUser } = user;
     res.json({ user: safeUser });
