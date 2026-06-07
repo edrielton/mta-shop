@@ -9,9 +9,35 @@ import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { broadcastPlayerData, broadcastAdmin } from "./websocket";
 import { hashSessionToken, parseDeviceName, detectSuspiciousActivity, getRealIp } from "./security";
 import { getPaymentClient, getPreferenceClient, getMercadoPagoPublicKey } from "./mercadopagoClient";
+
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "mta-jwt-secret-dev";
+const JWT_TTL = "7d";
+
+function signJwt(userId: string): string {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_TTL });
+}
+
+function verifyJwt(token: string): { userId: string } | null {
+  try { return jwt.verify(token, JWT_SECRET) as { userId: string }; }
+  catch { return null; }
+}
+
+// Extrai userId de JWT (header Authorization: Bearer xxx) OU de sessão (cookie)
+function getUserIdFromRequest(req: Request): string | null {
+  // 1. JWT via Authorization header (preferencial — funciona em qualquer ambiente)
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const payload = verifyJwt(authHeader.slice(7));
+    if (payload?.userId) return payload.userId;
+  }
+  // 2. Fallback: sessão via cookie
+  if (req.session?.userId) return req.session.userId;
+  return null;
+}
 
 
 
@@ -61,38 +87,32 @@ export function clearRateLimitInterval() { clearInterval(rateLimitCleanupInterva
 // ============ AUTH MIDDLEWARE ============
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (req.session?.userId) return next();
-  return res.status(401).json({ message: "Authentication required" });
+  const userId = getUserIdFromRequest(req);
+  if (!userId) return res.status(401).json({ message: "Authentication required" });
+  req.session.userId = userId; // mantém compatibilidade com código que lê req.session.userId
+  next();
 }
 
-// Middleware global que hidrata req.session.userId via cookie OU header X-Session-Token
+// Middleware global — popula req.session.userId via JWT ou cookie
 async function hydrateSession(req: Request, _res: Response, next: NextFunction) {
-  if (req.session?.userId) return next();
-
-  const tokenHeader = req.headers["x-session-token"] as string | undefined;
-  if (tokenHeader) {
-    try {
-      const sessionRow = await storage.getSession(hashSessionToken(tokenHeader));
-      if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
-        req.session.userId = sessionRow.userId;
-      }
-    } catch { /* ignora */ }
-  }
+  const userId = getUserIdFromRequest(req);
+  if (userId) req.session.userId = userId;
   next();
 }
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  // Método 1: sessão do browser (site web)
-  if (req.session.userId) {
-    const user = await storage.getUser(req.session.userId);
+  const userId = getUserIdFromRequest(req);
+  if (userId) {
+    const user = await storage.getUser(userId);
     if (user?.isAdmin) {
+      req.session.userId = userId;
       (req as any).adminUser = user;
       return next();
     }
-    return res.status(403).json({ message: "Admin access required" });
+    if (user) return res.status(403).json({ message: "Admin access required" });
   }
 
-  // Método 2: token MTA (painel in-game e scanner)
+  // Token MTA (painel in-game)
   const mtaToken = req.headers["x-api-token"] as string;
   if (mtaToken) {
     const settings = await storage.getMtaSettings();
@@ -283,29 +303,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/player", (_req: Request, _res: Response, next: NextFunction) => next());
   app.use("/api/mta", (_req: Request, _res: Response, next: NextFunction) => next());
 
-  // ============ DIAGNÓSTICO (remover após resolver) ============
-  app.get("/api/debug", async (req, res) => {
-    const tokenHeader = req.headers["x-session-token"] as string | undefined;
-    const cookieHeader = req.headers["cookie"];
-    
-    let sessionFromToken = null;
-    if (tokenHeader) {
-      try {
-        sessionFromToken = await storage.getSession(hashSessionToken(tokenHeader));
-      } catch (e: any) { sessionFromToken = { error: e.message }; }
-    }
-
-    res.json({
-      sessionID: req.sessionID,
-      sessionUserId: req.session?.userId || null,
-      cookieHeader: cookieHeader || "NENHUM COOKIE",
-      tokenHeader: tokenHeader ? tokenHeader.slice(0, 16) + "..." : "NENHUM TOKEN",
-      sessionFromToken,
-      isProd: process.env.NODE_ENV === "production",
-      storeType: sessionStore ? "PostgreSQL" : "Memory",
-    });
-  });
-
   // ============ AUTH ROUTES ============
 
   // Registro
@@ -330,25 +327,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       req.session.userId = user.id;
 
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = hashSessionToken(rawToken);
-
-      // Registra sessão
-      await storage.createSession({
-        userId: user.id,
-        sessionToken: tokenHash,
-        ipAddress: req.ip,
-        userAgent: req.get("user-agent"),
-        deviceName: parseDeviceName(req.get("user-agent")),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        isRevoked: false,
-      });
-
       const { password: _, ...safeUser } = user;
+      const token = signJwt(user.id);
 
       req.session.save((err) => {
-        if (err) console.error("[Register] session.save error:", err);
-        res.json({ user: safeUser, sessionToken: rawToken });
+        if (err) console.error("[Register] session.save:", err);
+        res.json({ user: safeUser, token });
       });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
@@ -410,27 +394,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // 4. Login OK — reseta contador de tentativas
       await storage.resetFailedLogins(user.id);
-      await storage.updateUser(user.id, {
-        lastLoginAt: new Date(),
-        lastLoginIp: req.ip,
-      });
+      await storage.updateUser(user.id, { lastLoginAt: new Date(), lastLoginIp: req.ip });
 
       req.session.userId = user.id;
-
-      // Gera token único para este login (fallback para quando cookie falha)
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = hashSessionToken(rawToken);
-
-      // Registra sessão no banco
-      await storage.createSession({
-        userId: user.id,
-        sessionToken: tokenHash,
-        ipAddress: req.ip,
-        userAgent: req.get("user-agent"),
-        deviceName: parseDeviceName(req.get("user-agent")),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        isRevoked: false,
-      });
 
       await storage.createLog({
         type: "auth", level: "info",
@@ -439,10 +405,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const { password: _, ...safeUser } = user;
+      const token = signJwt(user.id);
 
       req.session.save((err) => {
-        if (err) console.error("[Login] session.save error:", err);
-        res.json({ user: safeUser, sessionToken: rawToken });
+        if (err) console.error("[Login] session.save:", err);
+        res.json({ user: safeUser, token });
       });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
@@ -474,24 +441,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Usuário atual
   app.get("/api/auth/me", async (req, res) => {
-    let userId = req.session?.userId;
-
-    // Fallback: verifica header X-Session-Token se não tem sessão
-    if (!userId) {
-      const tokenHeader = req.headers["x-session-token"] as string | undefined;
-      if (tokenHeader) {
-        try {
-          const sessionRow = await storage.getSession(hashSessionToken(tokenHeader));
-          if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
-            userId = sessionRow.userId;
-            req.session.userId = userId;
-          }
-        } catch { /* ignora */ }
-      }
-    }
-
-    console.log("[/api/auth/me] userId:", userId || "none");
-
+    const userId = getUserIdFromRequest(req);
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
     const user = await storage.getUser(userId);
     if (!user) return res.status(401).json({ message: "User not found" });
