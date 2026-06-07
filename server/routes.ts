@@ -253,23 +253,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saveUninitialized: false,
       rolling: true,             // renova o cookie a cada requisição
       cookie: {
-        // HTTPS obrigatório quando sameSite="none".
-        // Em dev/localhost, não force sameSite="none" e nem domain fixo.
-        secure: isProd ? true : process.env.SESSION_COOKIE_SECURE !== "false",
+        secure: isProd,          // true em produção (HTTPS), false em dev
         httpOnly: true,
+        sameSite: isProd ? "none" : "lax",   // "none" só funciona com secure=true
         maxAge: sessionTTL * 1000,
-
-        // No browser, cookie de sessão precisa bater com o domínio/rota atual.
-        // Forçar domain=".mtastore.site" em localhost quebra o envio do cookie.
-        ...(isProd
-          ? {
-              sameSite: "none" as const,
-              // Usamos domain fixo para compartilhar sessão entre subdomínios sob mtastore.site.
-              domain: ".mtastore.site" as const,
-            }
-          : {
-              sameSite: "lax" as const,
-            }),
+        // Não fixar domínio — deixa o browser usar o domínio da requisição atual
+        // Isso garante que funciona tanto em mtastore.site quanto em xxx.up.railway.app
       },
     })
   );
@@ -462,15 +451,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const current = sessions.find(s => s.sessionToken === token);
       if (current) await storage.revokeSession(current.id, req.session.userId || "");
     }
-    const sessionSecure = process.env.SESSION_COOKIE_SECURE === "false" ? false : isProd;
+    const sessionSecure = isProd;
 
     req.session.destroy(() => {
       res.clearCookie("mta.sid", {
-        domain: ".mtastore.site",
         path: "/",
         secure: sessionSecure,
         httpOnly: true,
-        sameSite: "none",
+        sameSite: isProd ? "none" : "lax",
       });
       res.json({ success: true });
     });
