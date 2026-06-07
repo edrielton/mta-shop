@@ -273,40 +273,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     next();
   });
 
-  // ================= SESSION HYDRATION (Drizzle / user_sessions) =================
-  // express-session pode ter o cookie válido, mas req.session.userId pode não hidratar.
-  // Como você quer “tudo no Drizzle”, buscamos a sessão no banco usando sessionID (cookie).
-  app.use(async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // Se já tem userId, nada a fazer
-      if (req.session?.userId) return next();
 
-      // Se não existe sessão ID, não dá para consultar
-      if (!req.sessionID) return next();
-
-      const tokenHash = hashSessionToken(req.sessionID);
-      const sessionRow = await storage.getSession(tokenHash);
-
-      if (sessionRow?.userId) {
-        req.session.userId = sessionRow.userId;
-      }
-
-      return next();
-    } catch {
-      // Não quebra request por falha de hidratação
-      return next();
-    }
-  });
-
-  // Aplica verificação de conta em todas as rotas autenticadas
+  // ================= SESSION =================
+  // O express-session hidrata req.session via PgStore automaticamente.
+  // Rotas protegidas usam requireAuth que verifica req.session.userId.
   app.use("/api/user", requireAuth, requireActiveAccount);
-  // Checkout: não exigir hidratação completa de conta/atividade antes de criar a ordem.
-  // A validação de conta (suspensa/bloqueada) já acontece dentro do handler do checkout.
-  // Isso evita 401 quando a sessão ainda não hidrata corretamente.
-
   app.use("/api/admin", requireActiveAccount);
-
-  // MTA resources (no cookie session). Não bloquear /api/player e /api/mta.
   app.use("/api/player", (_req: Request, _res: Response, next: NextFunction) => next());
   app.use("/api/mta", (_req: Request, _res: Response, next: NextFunction) => next());
 
@@ -1684,4 +1656,3 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
-
