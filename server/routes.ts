@@ -221,44 +221,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const isProd = process.env.NODE_ENV === "production";
   const sessionTTL = 7 * 24 * 60 * 60; // 7 dias em segundos
 
-  // Session store: PostgreSQL em produção, memória em dev
-  let sessionStore: session.Store | undefined;
-
-  if (isProd && process.env.DATABASE_URL) {
-    try {
-      const PgStore = connectPgSimple(session);
-      sessionStore = new PgStore({
+  // Session store: sempre PostgreSQL quando DATABASE_URL existir
+  const PgStore = connectPgSimple(session);
+  const sessionStore = process.env.DATABASE_URL
+    ? new PgStore({
         conString: process.env.DATABASE_URL,
         tableName: "user_sessions_store",
         createTableIfMissing: true,
         ttl: sessionTTL,
         pruneSessionInterval: 60 * 60,
-        errorLog: (err) => console.error("[SessionStore]", err),
-      });
-      console.log("[Session] Usando PostgreSQL store (sessões persistentes)");
-    } catch (err) {
-      console.error("[Session] Falha ao criar PgStore:", err);
-      console.warn("[Session] Usando MemoryStore como fallback");
-    }
-  } else {
-    console.log("[Session] Usando MemoryStore (desenvolvimento)");
-  }
+        errorLog: (err: any) => console.error("[SessionStore]", err),
+      })
+    : undefined;
+
+  console.log("[Session] Store:", sessionStore ? "PostgreSQL" : "MemoryStore (sem DATABASE_URL)");
 
   app.use(
     session({
       store: sessionStore,
-      secret: process.env.SESSION_SECRET || "mta-store-secret-change-in-production",
-      name: "mta.sid",           // nome fixo do cookie (não o padrão "connect.sid")
+      secret: process.env.SESSION_SECRET || "mta-store-secret-dev-only",
+      name: "mta.sid",
       resave: false,
       saveUninitialized: false,
-      rolling: true,             // renova o cookie a cada requisição
+      rolling: true,
       cookie: {
-        secure: isProd,          // true em produção (HTTPS), false em dev
+        secure: isProd,
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",   // "none" só funciona com secure=true
+        sameSite: isProd ? "none" : "lax",
         maxAge: sessionTTL * 1000,
-        // Não fixar domínio — deixa o browser usar o domínio da requisição atual
-        // Isso garante que funciona tanto em mtastore.site quanto em xxx.up.railway.app
       },
     })
   );
@@ -305,9 +295,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       req.session.userId = user.id;
-      await new Promise<void>((resolve, reject) =>
-        req.session.save((err) => (err ? reject(err) : resolve()))
-      );
 
       // Registra sessão
       await storage.createSession({
@@ -387,11 +374,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lastLoginIp: req.ip,
       });
 
-      // Salva userId na sessão e força gravação no PgStore ANTES de responder
       req.session.userId = user.id;
-      await new Promise<void>((resolve, reject) =>
-        req.session.save((err) => (err ? reject(err) : resolve()))
-      );
 
       // Registra sessão no banco
       await storage.createSession({
@@ -442,9 +425,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Usuário atual
   app.get("/api/auth/me", async (req, res) => {
-// (removido) console.warn com detalhes sensíveis de sessão
-
-    
+    // Log temporário para diagnosticar sessão
+    console.log("[/api/auth/me] sessionID:", req.sessionID?.slice(0, 8), "userId:", req.session?.userId);
 
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const user = await storage.getUser(req.session.userId);
@@ -1660,3 +1642,4 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
+
