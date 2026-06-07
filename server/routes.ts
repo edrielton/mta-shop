@@ -241,13 +241,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       store: sessionStore,
       secret: process.env.SESSION_SECRET || "mta-store-secret-dev-only",
       name: "mta.sid",
-      resave: false,
+      resave: true,
       saveUninitialized: false,
       rolling: true,
       cookie: {
-        secure: isProd,
+        secure: false,      // deixa o browser aceitar em qualquer contexto
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",
+        sameSite: "lax",
         maxAge: sessionTTL * 1000,
       },
     })
@@ -1642,4 +1642,3 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
-
