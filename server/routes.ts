@@ -255,20 +255,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // Middleware: aceita sessão via cookie OU via header X-Session-Token
-  // Isso resolve o problema de cookies bloqueados em alguns proxies
   app.use(async (req: Request, _res: Response, next: NextFunction) => {
+    const tokenHeader = req.headers["x-session-token"] as string | undefined;
+
+    console.log(`[Auth] ${req.method} ${req.path} | cookie userId: ${req.session?.userId || "none"} | token header: ${tokenHeader ? tokenHeader.slice(0,8)+"..." : "none"}`);
+
     // Se já tem userId na sessão (cookie funcionou), segue
     if (req.session?.userId) return next();
 
-    // Tenta via header X-Session-Token (fallback para quando cookies falham)
-    const tokenHeader = req.headers["x-session-token"] as string | undefined;
+    // Tenta via header X-Session-Token
     if (tokenHeader) {
       try {
-        const sessionRow = await storage.getSession(hashSessionToken(tokenHeader));
+        const hashed = hashSessionToken(tokenHeader);
+        console.log(`[Auth] Buscando sessão pelo token hash: ${hashed.slice(0,16)}...`);
+        const sessionRow = await storage.getSession(hashed);
+        console.log(`[Auth] Sessão encontrada:`, sessionRow ? `userId=${sessionRow.userId} revoked=${sessionRow.isRevoked}` : "NÃO ENCONTRADA");
         if (sessionRow?.userId && !sessionRow.isRevoked && new Date(sessionRow.expiresAt) > new Date()) {
           req.session.userId = sessionRow.userId;
         }
-      } catch { /* ignora erros */ }
+      } catch (e) {
+        console.error("[Auth] Erro ao buscar sessão:", e);
+      }
     }
 
     next();
