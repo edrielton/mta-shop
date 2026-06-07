@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,11 +38,12 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Login automático (se a sessão já existir, redireciona para o dashboard)
-  if (!authLoading && user) {
-    setLocation("/dashboard");
-    return null;
-  }
+  // Redirect fora do render — evita React error #300
+  useEffect(() => {
+    if (!authLoading && user) {
+      setLocation("/dashboard");
+    }
+  }, [authLoading, user, setLocation]);
 
   if (authLoading) {
     return (
@@ -52,6 +53,7 @@ export default function AuthPage() {
     );
   }
 
+  if (user) return null; // useEffect cuida do redirect
 
   const loginForm = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),

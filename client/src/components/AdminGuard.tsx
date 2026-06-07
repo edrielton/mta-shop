@@ -1,9 +1,4 @@
-/**
- * AdminGuard.tsx
- * Protege rotas admin: verifica se o usuário está logado e é admin.
- * Se não estiver logado → redireciona para login.
- * Se não for admin → mostra 404.
- */
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Loader2 } from "lucide-react";
@@ -16,7 +11,13 @@ export default function AdminGuard({ children }: Props) {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
 
-  // Aguarda verificação de sessão
+  // Redirect fora do render — evita React error #300
+  useEffect(() => {
+    if (!isLoading && !user) {
+      navigate("/auth");
+    }
+  }, [isLoading, user, navigate]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -25,16 +26,8 @@ export default function AdminGuard({ children }: Props) {
     );
   }
 
-  // Não logado → vai para login
-  if (!user) {
-    const loginUrl = typeof window !== "undefined" && window.location.hostname.startsWith("admin.")
-      ? "/auth"
-      : "/auth";
-    navigate(loginUrl);
-    return null;
-  }
+  if (!user) return null; // useEffect cuida do redirect
 
-  // Logado mas não é admin → 404 genérico
   if (!user.isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">

@@ -1,7 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -83,11 +83,18 @@ export default function DashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
 
+  // Redirect fora do render — useEffect evita o React error #300
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setLocation("/auth");
+    }
+  }, [authLoading, user, setLocation]);
+
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/user/transactions"],
     queryFn: async () => {
       const res = await fetch("/api/user/transactions", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch transactions");
+      if (!res.ok) return [];
       const data = await res.json();
       return data.transactions;
     },
@@ -98,7 +105,7 @@ export default function DashboardPage() {
     queryKey: ["/api/user/stats"],
     queryFn: async () => {
       const res = await fetch("/api/user/stats", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch stats");
+      if (!res.ok) return null;
       return res.json();
     },
     enabled: !!user,
@@ -113,8 +120,7 @@ export default function DashboardPage() {
   }
 
   if (!user) {
-    setLocation("/auth");
-    return null;
+    return null; // useEffect cuida do redirect
   }
 
   const vipDaysRemaining = user.vipExpiresAt 
@@ -523,8 +529,8 @@ function SecurityTab({ userId }: { userId: string }) {
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery<{ sessions: SessionInfo[] }>({
     queryKey: ["/api/user/sessions"],
     queryFn: async () => {
-      const res = await fetch("/api/user/sessions");
-      if (!res.ok) throw new Error("Failed");
+      const res = await fetch("/api/user/sessions", { credentials: "include" });
+      if (!res.ok) return { sessions: [] };
       return res.json();
     },
   });

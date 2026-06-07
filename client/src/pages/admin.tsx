@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -941,6 +941,13 @@ export default function AdminPage() {
 
   const isAdmin = !!user?.isAdmin;
 
+  // Redirect fora do render — evita React error #300
+  useEffect(() => {
+    if (!authLoading && (!user || !user.isAdmin)) {
+      setLocation("/");
+    }
+  }, [authLoading, user, setLocation]);
+
   const { data: statsData } = useQuery({
     queryKey: ["/api/admin/stats"],
     queryFn: async () => {
@@ -962,8 +969,7 @@ export default function AdminPage() {
   }
 
   if (!isAdmin) {
-    setLocation("/");
-    return null;
+    return null; // useEffect cuida do redirect
   }
 
   return (
