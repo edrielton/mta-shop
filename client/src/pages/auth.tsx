@@ -38,51 +38,32 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect fora do render — evita React error #300
+  // TODOS os hooks antes de qualquer return condicional
+  const loginForm = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { username: "", password: "" },
+  });
+
+  const registerForm = useForm<RegisterForm>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      username: "", email: "", password: "",
+      confirmPassword: "", mtaSerial: "", mtaAccount: "",
+    },
+  });
+
+  // Redirect fora do render — useEffect evita violação de hooks
   useEffect(() => {
     if (!authLoading && user) {
       setLocation("/dashboard");
     }
   }, [authLoading, user, setLocation]);
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
-  }
-
-  if (user) return null; // useEffect cuida do redirect
-
-  const loginForm = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      username: "",
-      password: "",
-    },
-  });
-
-  const registerForm = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: {
-      username: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-      mtaSerial: "",
-      mtaAccount: "",
-    },
-  });
-
   const onLogin = async (data: LoginForm) => {
     setIsLoading(true);
     try {
       await login(data.username, data.password);
-      toast({
-        title: "Login realizado!",
-        description: "Bem-vindo de volta!",
-      });
+      toast({ title: "Login realizado!", description: "Bem-vindo de volta!" });
       setLocation("/dashboard");
     } catch (error) {
       toast({
@@ -105,10 +86,7 @@ export default function AuthPage() {
         mtaSerial: data.mtaSerial || undefined,
         mtaAccount: data.mtaAccount || undefined,
       });
-      toast({
-        title: "Conta criada!",
-        description: "Sua conta foi criada com sucesso.",
-      });
+      toast({ title: "Conta criada!", description: "Sua conta foi criada com sucesso." });
       setLocation("/dashboard");
     } catch (error) {
       toast({
@@ -121,9 +99,27 @@ export default function AuthPage() {
     }
   };
 
+  // Loading inicial
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  // Já logado — mostra spinner enquanto o useEffect redireciona
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex">
-      {/* Left side - Form */}
+      {/* Formulário */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
@@ -144,62 +140,31 @@ export default function AuthPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Entrar na Conta</CardTitle>
-                  <CardDescription>
-                    Digite suas credenciais para acessar
-                  </CardDescription>
+                  <CardDescription>Digite suas credenciais para acessar</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Form {...loginForm}>
                     <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
-                      <FormField
-                        control={loginForm.control}
-                        name="username"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Usuário</FormLabel>
-                            <FormControl>
-                              <Input 
-                                placeholder="seu_usuario" 
-                                {...field} 
-                                data-testid="input-login-username"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={loginForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Senha</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="password" 
-                                placeholder="••••••••" 
-                                {...field} 
-                                data-testid="input-login-password"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button 
-                        type="submit" 
-                        className="w-full" 
-                        disabled={isLoading}
-                        data-testid="button-login-submit"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Entrando...
-                          </>
-                        ) : (
-                          "Entrar"
-                        )}
+                      <FormField control={loginForm.control} name="username" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Usuário</FormLabel>
+                          <FormControl>
+                            <Input placeholder="seu_usuario" {...field} data-testid="input-login-username" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={loginForm.control} name="password" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Senha</FormLabel>
+                          <FormControl>
+                            <Input type="password" placeholder="••••••••" {...field} data-testid="input-login-password" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login-submit">
+                        {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Entrando...</> : "Entrar"}
                       </Button>
                     </form>
                   </Form>
@@ -211,143 +176,76 @@ export default function AuthPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Criar Conta</CardTitle>
-                  <CardDescription>
-                    Preencha os dados para criar sua conta
-                  </CardDescription>
+                  <CardDescription>Preencha os dados para criar sua conta</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Form {...registerForm}>
                     <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
-                      <FormField
-                        control={registerForm.control}
-                        name="username"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Usuário</FormLabel>
-                            <FormControl>
-                              <Input 
-                                placeholder="seu_usuario" 
-                                {...field} 
-                                data-testid="input-register-username"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={registerForm.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="email" 
-                                placeholder="seu@email.com" 
-                                {...field} 
-                                data-testid="input-register-email"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      <FormField control={registerForm.control} name="username" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Usuário</FormLabel>
+                          <FormControl>
+                            <Input placeholder="seu_usuario" {...field} data-testid="input-register-username" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={registerForm.control} name="email" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="seu@email.com" {...field} data-testid="input-register-email" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
                       <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={registerForm.control}
-                          name="password"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Senha</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="password" 
-                                  placeholder="••••••" 
-                                  {...field} 
-                                  data-testid="input-register-password"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={registerForm.control}
-                          name="confirmPassword"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Confirmar</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="password" 
-                                  placeholder="••••••" 
-                                  {...field} 
-                                  data-testid="input-register-confirm"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        <FormField control={registerForm.control} name="password" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Senha</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="••••••" {...field} data-testid="input-register-password" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={registerForm.control} name="confirmPassword" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Confirmar</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="••••••" {...field} data-testid="input-register-confirm" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
                       </div>
-                      
+
                       <div className="pt-4 border-t">
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Vincule sua conta MTA (opcional)
-                        </p>
+                        <p className="text-sm text-muted-foreground mb-4">Vincule sua conta MTA (opcional)</p>
                         <div className="grid grid-cols-2 gap-4">
-                          <FormField
-                            control={registerForm.control}
-                            name="mtaSerial"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Serial MTA</FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    placeholder="Seu serial" 
-                                    {...field} 
-                                    data-testid="input-register-serial"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={registerForm.control}
-                            name="mtaAccount"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Conta MTA</FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    placeholder="Nome no jogo" 
-                                    {...field} 
-                                    data-testid="input-register-account"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                          <FormField control={registerForm.control} name="mtaSerial" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Serial MTA</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Seu serial" {...field} data-testid="input-register-serial" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={registerForm.control} name="mtaAccount" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Conta MTA</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Nome no jogo" {...field} data-testid="input-register-account" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
                         </div>
                       </div>
 
-                      <Button 
-                        type="submit" 
-                        className="w-full" 
-                        disabled={isLoading}
-                        data-testid="button-register-submit"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Criando...
-                          </>
-                        ) : (
-                          "Criar Conta"
-                        )}
+                      <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-register-submit">
+                        {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</> : "Criar Conta"}
                       </Button>
                     </form>
                   </Form>
@@ -358,46 +256,26 @@ export default function AuthPage() {
         </div>
       </div>
 
-      {/* Right side - Info */}
+      {/* Lado direito — info */}
       <div className="hidden lg:flex flex-1 bg-primary/5 items-center justify-center p-8">
         <div className="max-w-md">
-          <h2 className="font-display text-3xl font-bold mb-6">
-            Por que criar uma conta?
-          </h2>
+          <h2 className="font-display text-3xl font-bold mb-6">Por que criar uma conta?</h2>
           <div className="space-y-6">
-            <div className="flex gap-4">
-              <div className="shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <Zap className="h-5 w-5" />
+            {[
+              { icon: <Zap className="h-5 w-5" />, title: "Ativação Instantânea", desc: "Seus itens são ativados automaticamente assim que o pagamento é confirmado" },
+              { icon: <Shield className="h-5 w-5" />, title: "Histórico Completo", desc: "Acompanhe todas suas compras e status de ativação em um só lugar" },
+              { icon: <Gamepad2 className="h-5 w-5" />, title: "Vinculação MTA", desc: "Vincule seu serial ou conta MTA para ativação automática no servidor" },
+            ].map((item) => (
+              <div key={item.title} className="flex gap-4">
+                <div className="shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  {item.icon}
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">{item.title}</h3>
+                  <p className="text-muted-foreground text-sm">{item.desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold mb-1">Ativação Instantânea</h3>
-                <p className="text-muted-foreground text-sm">
-                  Seus itens são ativados automaticamente assim que o pagamento é confirmado
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <Shield className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Histórico Completo</h3>
-                <p className="text-muted-foreground text-sm">
-                  Acompanhe todas suas compras e status de ativação em um só lugar
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <Gamepad2 className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Vinculação MTA</h3>
-                <p className="text-muted-foreground text-sm">
-                  Vincule seu serial ou conta MTA para ativação automática no servidor
-                </p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
