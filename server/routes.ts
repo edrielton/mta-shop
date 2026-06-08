@@ -13,6 +13,9 @@ import jwt from "jsonwebtoken";
 import { broadcastPlayerData, broadcastAdmin } from "./websocket";
 import { hashSessionToken, parseDeviceName, detectSuspiciousActivity, getRealIp } from "./security";
 import { getPaymentClient, getPreferenceClient, getMercadoPagoPublicKey } from "./mercadopagoClient";
+import modsRouter from "./mods.routes";
+app.use("/api/mods", modsRouter);
+
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "mta-jwt-secret-dev";
 const JWT_TTL = "7d";
