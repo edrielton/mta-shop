@@ -5,7 +5,7 @@ import fs from "fs";
 import { db } from "./db"; // seu drizzle db
 import { mods } from "@shared/schema"; // schema abaixo
 import { eq } from "drizzle-orm";
-
+import { storage as appStorage } from "./storage";
 
 const router = Router();
 
@@ -26,21 +26,24 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB por arquivo
 });
 
-// ─── Middleware de auth admin ──────────────────────────────────────────────────
-function requireAdmin(req: Request, res: Response, next: Function) {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Token ausente" });
-  // reutiliza sua lógica JWT existente
+// ─── Middleware de auth admin (compatível com server/routes.ts) ──────────────
+// Painel web usa sessão (cookie) gerida pelo express-session no server/routes.ts.
+
+async function requireAdmin(req: Request, res: Response, next: Function) {
+
   try {
-    const jwt = require("jsonwebtoken");
-    const payload = jwt.verify(token, process.env.SESSION_SECRET!);
-    if (!(payload as any).isAdmin) return res.status(403).json({ error: "Acesso negado" });
-    (req as any).user = payload;
-    next();
+    const userId = req.session?.userId;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+    const user = await appStorage.getUser(userId);
+    if (!user?.isAdmin) return res.status(403).json({ error: "Acesso negado" });
+
+    return next();
   } catch {
-    return res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Authentication failed" });
   }
 }
+
 
 // ─── GET /api/mods ─────────────────────────────────────────────────────────────
 router.get("/", requireAdmin, async (_req, res) => {
