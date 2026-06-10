@@ -2,9 +2,10 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { db } from "../db"; // seu drizzle db
-import { mods } from "../schema"; // schema abaixo
+import { db } from "./db"; // seu drizzle db
+import { mods } from "@shared/schema"; // schema abaixo
 import { eq } from "drizzle-orm";
+
 
 const router = Router();
 
