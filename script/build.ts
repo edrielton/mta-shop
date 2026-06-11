@@ -17,7 +17,7 @@ const allowlist = [
   "express-session",
   "jsonwebtoken",
   "memorystore",
-  "mercadopago",
+  "mercadopago",        // ← ADICIONA AQUI
   "multer",
   "nanoid",
   "nodemailer",
@@ -25,6 +25,7 @@ const allowlist = [
   "passport",
   "passport-local",
   "pg",
+  "stripe",
   "uuid",
   "ws",
   "xlsx",
