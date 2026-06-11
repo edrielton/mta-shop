@@ -2,8 +2,6 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -17,7 +15,7 @@ const allowlist = [
   "express-session",
   "jsonwebtoken",
   "memorystore",
-  "mercadopago",        // ← ADICIONA AQUI
+  "mercadopago",
   "multer",
   "nanoid",
   "nodemailer",
@@ -59,6 +57,10 @@ async function buildAll() {
     minify: true,
     external: externals,
     logLevel: "info",
+    // ← ISSO QUE FALTAVA
+    alias: {
+      "@shared": "./shared",
+    },
   });
 }
 
