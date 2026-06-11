@@ -2,11 +2,13 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
+// Módulos que serão bundlados pelo esbuild (inline no dist/index.cjs).
+// Todos os outros deps vão para `external` e são carregados da node_modules.
+// ATENÇÃO: NÃO adicione módulos com bindings nativos (.node) aqui —
+// eles devem ficar em external para o Node carregar o binário correto.
 const allowlist = [
   "@google/generative-ai",
   "axios",
-  "bcrypt",
-  "bufferutil",
   "connect-pg-simple",
   "cors",
   "date-fns",
@@ -26,7 +28,6 @@ const allowlist = [
   "passport-local",
   "pg",
   "stripe",
-  "utf-8-validate",
   "uuid",
   "ws",
   "xlsx",
@@ -42,6 +43,9 @@ async function buildAll() {
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
+
+  // Inclui optionalDependencies para que módulos nativos opcionais
+  // (ex: bufferutil, utf-8-validate) também fiquem em external.
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
