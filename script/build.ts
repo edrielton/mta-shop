@@ -6,6 +6,7 @@ const allowlist = [
   "@google/generative-ai",
   "axios",
   "bcrypt",
+  "bufferutil",
   "connect-pg-simple",
   "cors",
   "date-fns",
@@ -25,6 +26,7 @@ const allowlist = [
   "passport-local",
   "pg",
   "stripe",
+  "utf-8-validate",
   "uuid",
   "ws",
   "xlsx",
@@ -43,6 +45,7 @@ async function buildAll() {
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
+    ...Object.keys(pkg.optionalDependencies || {}),
   ];
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
