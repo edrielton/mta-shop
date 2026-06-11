@@ -5,6 +5,7 @@ import { rm, readFile } from "fs/promises";
 const allowlist = [
   "@google/generative-ai",
   "axios",
+  "bcrypt",
   "connect-pg-simple",
   "cors",
   "date-fns",
@@ -57,7 +58,6 @@ async function buildAll() {
     minify: true,
     external: externals,
     logLevel: "info",
-    // ← ISSO QUE FALTAVA
     alias: {
       "@shared": "./shared",
     },
