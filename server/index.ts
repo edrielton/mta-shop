@@ -1,7 +1,7 @@
 import "dotenv/config";
 
-import express, { type Request, Response, NextFunction } from "express";
-
+import express from "express";
+import { db } from "./db";
 
 import { registerRoutes } from "./routes";
 import { setupWebSocket } from "./websocket";
