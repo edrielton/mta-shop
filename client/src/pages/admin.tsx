@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -967,15 +967,25 @@ function ResourcesTab() {
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const tabFromUrl = params.get("tab") || "products";
+  const [activeTab, setActiveTab] = useState(tabFromUrl);
 
   const isAdmin = !!user?.isAdmin;
 
-  // Redirect fora do render — evita React error #300
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
       setLocation("/");
     }
   }, [authLoading, user, setLocation]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", value);
+    window.history.replaceState({}, "", url.toString());
+  };
 
   const { data: statsData } = useQuery({
     queryKey: ["/api/admin/stats"],
@@ -1042,7 +1052,7 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="products">
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="products"><Package className="h-4 w-4 mr-1.5" />Produtos</TabsTrigger>
             <TabsTrigger value="orders"><History className="h-4 w-4 mr-1.5" />Pedidos</TabsTrigger>

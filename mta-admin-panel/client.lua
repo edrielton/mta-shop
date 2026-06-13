@@ -12,7 +12,11 @@ addEventHandler("mta_admin:show", root, function(url, token)
     local ok, err = pcall(function()
         outputChatBox("[Admin Panel] mta_admin:show recebido. url=" .. tostring(url), 255, 255, 0)
         if isOpen then
-            closePanel()
+            -- Painel já aberto — apenas traz para frente
+            if guiBrowser and isElement(guiBrowser) then
+                guiBringToFront(guiBrowser)
+                guiSetVisible(guiBrowser, true)
+            end
             return
         end
 
@@ -67,16 +71,20 @@ addEventHandler("mta_admin:show", root, function(url, token)
             guiSetAlpha(guiBrowser, 255)
         end
 
-        -- carregamento com repetição
+        -- carregamento com repetição (só tenta se ainda não carregou)
+        local ready = false
         outputChatBox("[Admin Panel] starting tryLoad...")
         tryLoad(1)
-        setTimer(function() tryLoad(2) end, 300, 1)
-        setTimer(function() tryLoad(3) end, 600, 1)
+        setTimer(function()
+            if not ready then tryLoad(2) end
+        end, 300, 1)
+        setTimer(function()
+            if not ready then tryLoad(3) end
+        end, 600, 1)
 
         -- eventos
         addEventHandler("onClientBrowserCreated", theBrowser, function()
             outputChatBox("[Admin Panel] browser created -> load: " .. tostring(localUrl), 255, 220, 50)
-            -- teste: tenta buscar via fetchRemote (se existir no MTA) para validar status/corpo
             if fetchRemote then
                 fetchRemote(localUrl, {
                     method = "GET",
@@ -88,14 +96,11 @@ addEventHandler("mta_admin:show", root, function(url, token)
                     outputChatBox("[Admin Panel] fetchRemote HTML test errno=" .. tostring(errno) .. ", len=" .. tostring(len) .. " type=" .. tostring(type(resp)), 255, 200, 50)
                 end)
             end
-            -- force load com http GET via loadBrowserURL
             loadBrowserURL(theBrowser, localUrl)
-
         end)
 
-
-        local ready = false
         addEventHandler("onClientBrowserDocumentReady", theBrowser, function()
+            if ready then return end  -- ignora reloads duplicados
             ready = true
             executeBrowserJavascript(theBrowser, string.format(
                 'window.MTA_CONFIG={siteUrl:"%s",token:"%s"};if(window.onMtaConfig)window.onMtaConfig();',
@@ -107,18 +112,17 @@ addEventHandler("mta_admin:show", root, function(url, token)
         -- Debug: se não disparar documentReady em 8s, avisa
         setTimer(function()
             if not ready and isElement(theBrowser) then
-            outputChatBox("[Admin Panel] ERRO: documentReady não disparou. Tentando forçar reload + alertar. URL=" .. tostring(localUrl), 255, 80, 80)
-            if isElement(guiBrowser) then
-                guiBringToFront(guiBrowser)
-                guiSetVisible(guiBrowser, true)
-            end
-            -- tenta novo load mais 1 vez
-            setTimer(function()
-                if theBrowser and isElement(theBrowser) and localUrl and localUrl ~= "" then
-                    loadBrowserURL(theBrowser, localUrl)
+                outputChatBox("[Admin Panel] ERRO: documentReady não disparou. URL=" .. tostring(localUrl), 255, 80, 80)
+                if isElement(guiBrowser) then
+                    guiBringToFront(guiBrowser)
+                    guiSetVisible(guiBrowser, true)
                 end
-            end, 500, 1)
-
+                -- tenta novo load mais 1 vez
+                setTimer(function()
+                    if not ready and theBrowser and isElement(theBrowser) and localUrl and localUrl ~= "" then
+                        loadBrowserURL(theBrowser, localUrl)
+                    end
+                end, 500, 1)
             end
         end, 8000, 1)
 

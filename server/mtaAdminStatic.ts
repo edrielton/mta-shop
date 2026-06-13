@@ -1,6 +1,9 @@
 import express, { type Express, type Request, type Response } from "express";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Serve o panel.html do recurso mta-admin-panel via HTTP,
 // para que o guiBrowser do MTA consiga renderizar (somente http/https).

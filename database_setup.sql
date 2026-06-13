@@ -13,8 +13,7 @@
 --  (ele cria todas as tabelas automaticamente)
 -- ============================================================
 
--- UUID nativo do PostgreSQL (sem extensão pgcrypto)
--- gen_random_uuid() está disponível por padrão no PostgreSQL 13+
+-- UUID nativo do PostgreSQL (gen_random_uuid() disponível no PG 13+)
 
 -- ============================================================
 -- 1. USERS
@@ -30,9 +29,8 @@ CREATE TABLE IF NOT EXISTS "users" (
     "is_vip"                BOOLEAN       NOT NULL DEFAULT FALSE,
     "vip_expires_at"        TIMESTAMP,
     "coin_balance"          INTEGER       NOT NULL DEFAULT 0,
-    "mp_customer_id"       TEXT,
+    "mp_customer_id"        TEXT,
     "created_at"            TIMESTAMP     NOT NULL DEFAULT NOW(),
-    -- Segurança
     "failed_login_attempts" INTEGER       NOT NULL DEFAULT 0,
     "locked_until"          TIMESTAMP,
     "is_suspended"          BOOLEAN       NOT NULL DEFAULT FALSE,
@@ -73,13 +71,15 @@ CREATE TABLE IF NOT EXISTS "products" (
     "name"           TEXT           NOT NULL,
     "description"    TEXT,
     "sku"            TEXT           NOT NULL UNIQUE,
-    "price"          DECIMAL(10,2)  NOT NULL,
+    "price"          DECIMAL(10,2)  NOT NULL DEFAULT 0,
     "currency"       TEXT           NOT NULL DEFAULT 'BRL',
     "category"       TEXT           NOT NULL,
     "image_url"      TEXT,
     "mta_command"    TEXT           NOT NULL,
     "mta_params"     JSONB,
     "is_active"      BOOLEAN        NOT NULL DEFAULT TRUE,
+    "is_free"        BOOLEAN        NOT NULL DEFAULT FALSE,
+    "claim_limit"    INTEGER,
     "stock_quantity" INTEGER,
     "created_at"     TIMESTAMP      NOT NULL DEFAULT NOW()
 );
@@ -94,8 +94,9 @@ CREATE TABLE IF NOT EXISTS "transactions" (
     "id"                          VARCHAR        PRIMARY KEY DEFAULT gen_random_uuid(),
     "user_id"                     VARCHAR        NOT NULL REFERENCES "users" ("id"),
     "product_id"                  VARCHAR        REFERENCES "products" ("id") ON DELETE SET NULL,
-    "stripe_payment_intent_id"    TEXT,
-    "stripe_checkout_session_id"  TEXT,
+    "mp_payment_id"               TEXT,
+    "mp_preference_id"            TEXT,
+    "mp_external_reference"       TEXT,
     "amount"                      DECIMAL(10,2)  NOT NULL,
     "currency"                    TEXT           NOT NULL DEFAULT 'BRL',
     "status"                      TEXT           NOT NULL DEFAULT 'pending',
@@ -111,10 +112,11 @@ CREATE TABLE IF NOT EXISTS "transactions" (
     "updated_at"                  TIMESTAMP      NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS "idx_transactions_user_id"       ON "transactions" ("user_id");
-CREATE INDEX IF NOT EXISTS "idx_transactions_status"        ON "transactions" ("status");
-CREATE INDEX IF NOT EXISTS "idx_transactions_stripe"        ON "transactions" ("stripe_checkout_session_id");
-CREATE INDEX IF NOT EXISTS "idx_transactions_created_at"    ON "transactions" ("created_at" DESC);
+CREATE INDEX IF NOT EXISTS "idx_transactions_user_id"            ON "transactions" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_transactions_status"             ON "transactions" ("status");
+CREATE INDEX IF NOT EXISTS "idx_transactions_mp_payment_id"      ON "transactions" ("mp_payment_id");
+CREATE INDEX IF NOT EXISTS "idx_transactions_mp_external_ref"    ON "transactions" ("mp_external_reference");
+CREATE INDEX IF NOT EXISTS "idx_transactions_created_at"         ON "transactions" ("created_at" DESC);
 
 -- updated_at automático
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -169,16 +171,74 @@ CREATE TRIGGER "trg_mta_settings_updated_at"
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
+-- 7. MODS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "mods" (
+    "id"             SERIAL     PRIMARY KEY,
+    "original_name"  TEXT       NOT NULL,
+    "filename"       TEXT       NOT NULL,
+    "size"           INTEGER    NOT NULL,
+    "category"       TEXT       NOT NULL DEFAULT 'outro',
+    "active"         BOOLEAN    NOT NULL DEFAULT TRUE,
+    "uploaded_at"    TIMESTAMP  NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- 8. PLAYER_TOKENS (tokens de auto-login gerados pelo MTA)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "player_tokens" (
+    "id"         VARCHAR    PRIMARY KEY DEFAULT gen_random_uuid(),
+    "serial"     TEXT       NOT NULL,
+    "token"      TEXT       NOT NULL UNIQUE,
+    "used"       BOOLEAN    NOT NULL DEFAULT FALSE,
+    "expires_at" TIMESTAMP  NOT NULL,
+    "created_at" TIMESTAMP  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "idx_player_tokens_token"  ON "player_tokens" ("token");
+CREATE INDEX IF NOT EXISTS "idx_player_tokens_serial" ON "player_tokens" ("serial");
+
+-- ============================================================
+-- 9. PLAYER_DATA (dados sincronizados do servidor RP)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "player_data" (
+    "serial"        TEXT      PRIMARY KEY,
+    "online"        BOOLEAN   NOT NULL DEFAULT FALSE,
+    "nome"          TEXT,
+    "idade"         INTEGER   DEFAULT 0,
+    "sexo"          TEXT      DEFAULT 'M',
+    "skin"          INTEGER   DEFAULT 0,
+    "horas_jogadas" INTEGER   DEFAULT 0,
+    "dinheiro"      INTEGER   DEFAULT 0,
+    "banco"         INTEGER   DEFAULT 0,
+    "faccao"        TEXT      DEFAULT 'Nenhuma',
+    "cargo"         TEXT      DEFAULT 'Membro',
+    "emprego"       TEXT      DEFAULT 'Desempregado',
+    "nivel"         INTEGER   DEFAULT 1,
+    "xp"            INTEGER   DEFAULT 0,
+    "vida"          INTEGER   DEFAULT 100,
+    "colete"        INTEGER   DEFAULT 0,
+    "cnh"           BOOLEAN   DEFAULT FALSE,
+    "rg"            BOOLEAN   DEFAULT FALSE,
+    "porte_arma"    BOOLEAN   DEFAULT FALSE,
+    "veiculos"      JSONB     DEFAULT '[]',
+    "inventario"    JSONB     DEFAULT '[]',
+    "propriedades"  JSONB     DEFAULT '[]',
+    "updated_at"    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
 -- DADOS INICIAIS
 -- ============================================================
 
 -- Admin padrão: login admin / senha admin123
--- TROQUE A SENHA após o primeiro acesso!
+-- ⚠️ TROQUE A SENHA após o primeiro acesso!
+-- Hash bcrypt de "admin123"
 INSERT INTO "users" ("username", "email", "password", "is_admin")
 VALUES (
     'admin',
     'admin@mtastore.com',
-    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    '$2b$10$h309nylt5KkP1MxJWBtC0OcwfqGa5n1GKc7WHANGmpwvlOqUUmJwa',
     TRUE
 ) ON CONFLICT ("username") DO NOTHING;
 
@@ -216,103 +276,3 @@ VALUES
  'KIT-PREMIUM', 34.90, 'BRL', 'item', 'giveWeaponKit', '{"kit": "premium"}', TRUE)
 
 ON CONFLICT ("sku") DO NOTHING;
-
--- ============================================================
--- 7. PLAYER_TOKENS (tokens de auto-login gerados pelo MTA)
--- ============================================================
-CREATE TABLE IF NOT EXISTS "player_tokens" (
-    "id"         UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
-    "serial"     TEXT       NOT NULL,
-    "token"      TEXT       NOT NULL UNIQUE,
-    "used"       BOOLEAN    NOT NULL DEFAULT FALSE,
-    "expires_at" TIMESTAMP  NOT NULL,
-    "created_at" TIMESTAMP  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS "idx_player_tokens_token"  ON "player_tokens" ("token");
-CREATE INDEX IF NOT EXISTS "idx_player_tokens_serial" ON "player_tokens" ("serial");
-
--- ============================================================
--- 8. PLAYER_DATA (dados sincronizados do servidor RP)
--- ============================================================
-CREATE TABLE IF NOT EXISTS "player_data" (
-    "serial"       TEXT    PRIMARY KEY,
-    "online"       BOOLEAN NOT NULL DEFAULT FALSE,
-
-    -- Personagem
-    "nome"         TEXT,
-    "idade"        INTEGER DEFAULT 0,
-    "sexo"         TEXT    DEFAULT 'M',
-    "skin"         INTEGER DEFAULT 0,
-    "horas_jogadas" INTEGER DEFAULT 0,
-
-    -- Economia
-    "dinheiro"     BIGINT  DEFAULT 0,
-    "banco"        BIGINT  DEFAULT 0,
-
-    -- RP
-    "faccao"       TEXT    DEFAULT 'Nenhuma',
-    "cargo"        TEXT    DEFAULT 'Membro',
-    "emprego"      TEXT    DEFAULT 'Desempregado',
-    "nivel"        INTEGER DEFAULT 1,
-    "xp"           INTEGER DEFAULT 0,
-
-    -- Status
-    "vida"         INTEGER DEFAULT 100,
-    "colete"       INTEGER DEFAULT 0,
-
-    -- Documentos
-    "cnh"          BOOLEAN DEFAULT FALSE,
-    "rg"           BOOLEAN DEFAULT FALSE,
-    "porte_arma"   BOOLEAN DEFAULT FALSE,
-
-    -- Listas (JSON)
-    "veiculos"     JSONB   DEFAULT '[]',
-    "inventario"   JSONB   DEFAULT '[]',
-    "propriedades" JSONB   DEFAULT '[]',
-
-    "updated_at"   TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
--- ============================================================
--- 7. PLAYER_TOKENS (auto-login via MTA)
--- ============================================================
-CREATE TABLE IF NOT EXISTS "player_tokens" (
-    "id"         UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
-    "serial"     TEXT      NOT NULL,
-    "token"      TEXT      NOT NULL UNIQUE,
-    "used"       BOOLEAN   NOT NULL DEFAULT FALSE,
-    "expires_at" TIMESTAMP NOT NULL,
-    "created_at" TIMESTAMP NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS "idx_player_tokens_token"  ON "player_tokens" ("token");
-CREATE INDEX IF NOT EXISTS "idx_player_tokens_serial" ON "player_tokens" ("serial");
-
--- ============================================================
--- 8. PLAYER_DATA (dados sincronizados do servidor RP)
--- ============================================================
-CREATE TABLE IF NOT EXISTS "player_data" (
-    "serial"        TEXT      PRIMARY KEY,
-    "online"        BOOLEAN   NOT NULL DEFAULT FALSE,
-    "nome"          TEXT,
-    "idade"         INTEGER   DEFAULT 0,
-    "sexo"          TEXT      DEFAULT 'M',
-    "skin"          INTEGER   DEFAULT 0,
-    "horas_jogadas" INTEGER   DEFAULT 0,
-    "dinheiro"      BIGINT    DEFAULT 0,
-    "banco"         BIGINT    DEFAULT 0,
-    "faccao"        TEXT      DEFAULT 'Nenhuma',
-    "cargo"         TEXT      DEFAULT 'Membro',
-    "emprego"       TEXT      DEFAULT 'Desempregado',
-    "nivel"         INTEGER   DEFAULT 1,
-    "xp"            INTEGER   DEFAULT 0,
-    "vida"          INTEGER   DEFAULT 100,
-    "colete"        INTEGER   DEFAULT 0,
-    "cnh"           BOOLEAN   DEFAULT FALSE,
-    "rg"            BOOLEAN   DEFAULT FALSE,
-    "porte_arma"    BOOLEAN   DEFAULT FALSE,
-    "veiculos"      JSONB     DEFAULT '[]',
-    "inventario"    JSONB     DEFAULT '[]',
-    "propriedades"  JSONB     DEFAULT '[]',
-    "updated_at"    TIMESTAMP NOT NULL DEFAULT NOW()
-);

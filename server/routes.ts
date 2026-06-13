@@ -16,7 +16,10 @@ import { getPaymentClient, getPreferenceClient, getMercadoPagoPublicKey } from "
 import modsRouter from "./mods.routes";
 
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "mta-jwt-secret-dev";
+const JWT_SECRET: string = process.env.JWT_SECRET || process.env.SESSION_SECRET || "";
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET or SESSION_SECRET must be set in environment variables.");
+}
 const JWT_TTL = "7d";
 
 function signJwt(userId: string): string {
@@ -836,6 +839,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
    */
   app.post("/api/checkout/webhook", async (req: any, res) => {
     try {
+      // ── Verifica assinatura do webhook MP ──────────────────────
+      const webhookSecret = process.env.MP_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const signature = req.headers["x-signature"] as string;
+        if (!signature) {
+          console.warn("[Webhook MP] Requisição sem assinatura — rejeitada");
+          return res.status(401).json({ error: "Missing signature" });
+        }
+        // Formato MP: "ts=timestamp;v1=hash"
+        const parts = Object.fromEntries(
+          signature.split(",").map(p => p.split("=") as [string, string])
+        );
+        const ts = parts.ts;
+        const v1 = parts.v1;
+        if (ts && v1) {
+          const payload = `${ts}.${JSON.stringify(req.body)}`;
+          const expected = crypto.createHmac("sha256", webhookSecret).update(payload).digest("hex");
+          if (v1 !== expected) {
+            console.warn("[Webhook MP] Assinatura inválida — rejeitada");
+            return res.status(401).json({ error: "Invalid signature" });
+          }
+        }
+      }
+
       const { type, data } = req.body;
 
       // MP envia também query params ?topic=payment&id=xxx (IPN legado)
