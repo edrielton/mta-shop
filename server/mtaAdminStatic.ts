@@ -3,13 +3,17 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+declare const __dirname: string;
+// @ts-ignore — __dirname existe em CJS (produção via esbuild) e em tsx (dev)
+const currentDir = typeof __dirname !== "undefined"
+  ? __dirname
+  : path.dirname(fileURLToPath(import.meta.url));
 
 // Serve o panel.html do recurso mta-admin-panel via HTTP,
 // para que o guiBrowser do MTA consiga renderizar (somente http/https).
 export function serveMtaAdminPanelStatic(app: Express) {
   const panelPath = path.resolve(
-    __dirname,
+    currentDir,
     "..",
     "mta-admin-panel",
     "panel.html"

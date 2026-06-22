@@ -3,10 +3,14 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+declare const __dirname: string;
+// @ts-ignore — __dirname existe em CJS (produção via esbuild) e em tsx (dev)
+const currentDir = typeof __dirname !== "undefined"
+  ? __dirname
+  : path.dirname(fileURLToPath(import.meta.url));
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, "public");
+  const distPath = path.resolve(currentDir, "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
