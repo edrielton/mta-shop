@@ -490,6 +490,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============ SCAN DATA (público) ============
+
+  app.get("/api/scan-data", async (_req, res) => {
+    try {
+      const data = await storage.getLatestScannerData();
+      if (!data) {
+        return res.json({ success: false, total: 0, detectedItems: 0, resources: [], detected: [] });
+      }
+      res.json({
+        success: true,
+        total: data.totalResources,
+        detectedItems: data.detectedItems,
+        scannedAt: Math.floor(new Date(data.scannedAt!).getTime() / 1000),
+        trigger: data.trigger,
+        resources: data.resources || [],
+        detected: data.detected || [],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch scan data" });
+    }
+  });
+
   // ============ USER ROUTES ============
 
   app.get("/api/user/stats", requireAuth, async (req, res) => {
@@ -1321,7 +1343,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Recebe sync disparado pelo comando /storesync no MTA
+  // Recebe sync disparado pelo scanner app, /storesync, ou scanner web
   app.post("/api/mta/sync", async (req, res) => {
     try {
       const apiToken = req.headers["x-api-token"];
@@ -1331,53 +1353,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(401).json({ success: false, error: "Unauthorized" });
       }
 
-      const { detected = [], resources = [], trigger, scannedAt } = req.body;
+      const { detected = [], resources = [], trigger, scannedAt, total } = req.body;
 
-      let created = 0;
-      let skipped = 0;
+      const normalizedDetected = detected.map((item: any) => ({
+        resourceName: item.resourceName,
+        suggestedName: item.suggestedName,
+        suggestedDesc: item.suggestedDesc || "",
+        category: item.category || "item",
+        mtaCommand: item.mtaCommand,
+        mtaParams: item.mtaParams || {},
+        autoDetected: item.autoDetected || false,
+        luaCommands: item.luaCommands || [],
+        estimatedPrice: item.estimatedPrice || 0,
+      }));
 
-      for (const item of detected) {
-        const sku = `AUTO-${item.resourceName}-${item.mtaCommand}-${JSON.stringify(item.mtaParams || {}).slice(0, 20)}`
-          .replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 80);
+      const normalizedResources = (resources || []).map((r: any) => ({
+        name: r.name,
+        state: r.state || "unknown",
+        description: r.description || "",
+        author: r.author || "",
+        version: r.version || "?",
+        classified: r.category || r.classified || "other",
+        sellable: r.sellable || [],
+        luaFileCount: r.luaFileCount || 0,
+      }));
 
-        const existing = await storage.getProductBySku(sku);
-        if (existing) { skipped++; continue; }
-
-        await storage.createProduct({
-          name:        item.suggestedName,
-          description: item.suggestedDesc || "",
-          sku,
-          price:       "0.00",
-          currency:    "BRL",
-          category:    item.category || "item",
-          mtaCommand:  item.mtaCommand,
-          mtaParams:   item.mtaParams || {},
-          isActive:    false,
-        });
-        created++;
-      }
+      // Salva no banco de dados
+      await storage.saveScannerData({
+        source: req.body.source || "scanner_app",
+        trigger: trigger || "scanner_app",
+        totalResources: total || resources.length || detected.length,
+        detectedItems: detected.length,
+        scannedAt: new Date((scannedAt || Math.floor(Date.now() / 1000)) * 1000),
+        resources: normalizedResources,
+        detected: normalizedDetected,
+      });
 
       await storage.createLog({
         type:    "admin",
         level:   "info",
-        message: `Sync via comando MTA por "${trigger}": ${resources.length} mods, ${detected.length} detectados, ${created} criados, ${skipped} existiam.`,
+        message: `Scan recebido de "${trigger}": ${resources.length} mods, ${detected.length} itens detectados.`,
       });
 
-      // Notifica admins online via WebSocket
-      broadcastAdmin("command_sync", {
+      // Notifica admins online via WebSocket em tempo real
+      broadcastAdmin("scan_received", {
         trigger,
-        scannedAt,
-        total:   detected.length,
-        created,
-        skipped,
-        message: `Sync concluído por ${trigger}: ${created} produto(s) criado(s).`,
+        scannedAt: scannedAt || Math.floor(Date.now() / 1000),
+        total: detected.length,
+        message: `Novo scan: ${detected.length} item(ns) detectado(s). Abra Resources MTA para revisar.`,
       });
 
-      res.json({ success: true, total: detected.length, created, skipped });
+      res.json({ success: true, total: detected.length, created: 0, skipped: detected.length });
     } catch (error) {
       console.error("Command sync error:", error);
       res.status(500).json({ success: false, error: "Internal error" });
     }
+  });
+
+  // Retorna os dados do último scan para o admin panel
+  app.get("/api/admin/mta-scan-data", requireAdmin, async (_req, res) => {
+    const data = await storage.getLatestScannerData();
+    if (!data) {
+      return res.json({ success: false, total: 0, detectedItems: 0, resources: [], detected: [] });
+    }
+    res.json({
+      success: true,
+      total: data.totalResources,
+      detectedItems: data.detectedItems,
+      scannedAt: Math.floor(new Date(data.scannedAt!).getTime() / 1000),
+      trigger: data.trigger,
+      resources: data.resources || [],
+      detected: data.detected || [],
+    });
   });
 
   // Auto-cria produtos a partir dos itens detectados pelo scanner

@@ -768,7 +768,8 @@ function SettingsTab({ isAdmin }: { isAdmin: boolean }) {
 // ── ResourcesTab ──────────────────────────────────────────────────────────────
 interface DetectedItem {
   resourceName: string; suggestedName: string; suggestedDesc: string;
-  category: string; mtaCommand: string; mtaParams: Record<string, any>; autoDetected: boolean;
+  category: string; mtaCommand: string; mtaParams: Record<string, any>;
+  autoDetected: boolean; luaCommands?: string[];
 }
 interface MtaResource {
   name: string; state: string; description: string; classified: string | null;
@@ -776,8 +777,12 @@ interface MtaResource {
 }
 interface ScanResult {
   success: boolean; total: number; running: number; detectedItems: number;
-  scannedAt: number; resources: MtaResource[]; detected: DetectedItem[];
+  scannedAt: number; trigger?: string; resources: MtaResource[]; detected: DetectedItem[];
 }
+
+const ESTIMATED_PRICES: Record<string, number> = {
+  vip: 29.90, vehicle: 19.90, coins: 9.90, item: 14.90, weapon: 14.90,
+};
 
 function ResourcesTab() {
   const { toast } = useToast();
@@ -785,9 +790,28 @@ function ResourcesTab() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"detected" | "all">("detected");
-  const [items, setItems] = useState<(DetectedItem & { editName: string; editPrice: string })[]>([]);
+  const [view, setView] = useState<"pending" | "all" | "products">("pending");
+  const [items, setItems] = useState<(DetectedItem & { editName: string; editPrice: string; editDesc: string })[]>([]);
 
+  // Carrega dados do último scan do scanner app
+  async function loadScanData() {
+    try {
+      const res = await fetch("/api/admin/mta-scan-data", { credentials: "include" });
+      const data = await res.json();
+      if (data.success && data.detected && data.detected.length > 0) {
+        setScan(data);
+        setItems(data.detected.map((i: DetectedItem) => ({
+          ...i,
+          editName: i.suggestedName,
+          editDesc: i.suggestedDesc || "",
+          editPrice: String(ESTIMATED_PRICES[i.category] || 9.90),
+        })));
+        toast({ title: "Scan carregado", description: `${data.detected.length} item(ns) do último scan.` });
+      }
+    } catch {}
+  }
+
+  // Escaneia direto do servidor MTA
   async function runScan() {
     setScanning(true);
     try {
@@ -795,14 +819,20 @@ function ResourcesTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Erro ao escanear");
       setScan(data);
-      setItems((data.detected || []).map((i: DetectedItem) => ({ ...i, editName: i.suggestedName, editPrice: "" })));
+      setItems((data.detected || []).map((i: DetectedItem) => ({
+        ...i,
+        editName: i.suggestedName,
+        editDesc: i.suggestedDesc || "",
+        editPrice: String(ESTIMATED_PRICES[i.category] || 9.90),
+      })));
       toast({ title: "Scan concluído", description: `${data.detectedItems || 0} item(ns) detectado(s).` });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     } finally { setScanning(false); }
   }
 
-  async function createItem(item: DetectedItem & { editName: string; editPrice: string }) {
+  // Cria um produto a partir do item detectado
+  async function createItem(item: DetectedItem & { editName: string; editPrice: string; editDesc: string }, activate = false) {
     if (!item.editPrice || parseFloat(item.editPrice) <= 0) {
       toast({ title: "Defina o preço", variant: "destructive" }); return;
     }
@@ -812,14 +842,14 @@ function ResourcesTab() {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: item.editName, description: item.suggestedDesc, sku,
+          name: item.editName, description: item.editDesc || item.suggestedDesc, sku,
           price: item.editPrice, currency: "BRL", category: item.category,
-          mtaCommand: item.mtaCommand, mtaParams: item.mtaParams, isActive: false,
+          mtaCommand: item.mtaCommand, mtaParams: item.mtaParams, isActive: activate,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      toast({ title: "Criado!", description: `"${item.editName}" adicionado (inativo até você ativar).` });
+      toast({ title: "Criado!", description: `"${item.editName}" adicionado${activate ? " e ATIVADO" : " (inativo)"}.` });
       qc.invalidateQueries({ queryKey: ["/api/admin/products"] });
       setItems(prev => prev.filter(p => p !== item));
     } catch (e: any) {
@@ -827,92 +857,181 @@ function ResourcesTab() {
     }
   }
 
-  const catColor = (c: string) => ({ vip: "text-amber-500 bg-amber-500/10", vehicle: "text-blue-500 bg-blue-500/10", coins: "text-emerald-500 bg-emerald-500/10" }[c] || "text-purple-500 bg-purple-500/10");
+  // Descarta um item (não quer vender)
+  function discardItem(idx: number) {
+    setItems(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  // Cria todos de uma vez com preço padrão
+  async function createAll() {
+    let created = 0;
+    for (const item of items) {
+      if (parseFloat(item.editPrice) > 0) {
+        await createItem(item);
+        created++;
+      }
+    }
+    toast({ title: "Todos criados!", description: `${created} produto(s) criado(s).` });
+  }
+
+  const catIcon = (c: string) => ({ vip: "👑", vehicle: "🚗", coins: "💰", item: "📦", weapon: "🔫" }[c] || "📦");
+  const catColor = (c: string) => ({ vip: "text-amber-500 bg-amber-500/10", vehicle: "text-blue-500 bg-blue-500/10", coins: "text-emerald-500 bg-emerald-500/10", weapon: "text-red-500 bg-red-500/10" }[c] || "text-purple-500 bg-purple-500/10");
   const stateColor = (s: string) => ({ running: "text-green-500 bg-green-500/10", loaded: "text-blue-500 bg-blue-500/10", failed: "text-red-500 bg-red-500/10" }[s] || "text-yellow-500 bg-yellow-500/10");
   const stateLabel = (s: string) => ({ running: "Rodando", loaded: "Parado", failed: "Falhou", starting: "Iniciando" }[s] || s);
   const filtered = (scan?.resources || []).filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
 
+  // Auto-load scan data on mount
+  useEffect(() => { loadScanData(); }, []);
+
   return (
     <div className="space-y-6">
+      {/* Header Card */}
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5 text-primary" />Scanner de Mods</CardTitle>
-              <CardDescription>Detecta VIPs, veículos, kits automaticamente. Você só define o preço.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5 text-primary" />Resources MTA</CardTitle>
+              <CardDescription>Mods detectados pelo Scanner App. Defina preço e escolha quais vão à venda.</CardDescription>
             </div>
-            <Button onClick={runScan} disabled={scanning} className="gap-2">
-              {scanning ? <><Loader2 className="h-4 w-4 animate-spin" />Escaneando...</> : <><ScanLine className="h-4 w-4" />Escanear</>}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={loadScanData} className="gap-2">
+                <RefreshCw className="h-4 w-4" />Atualizar
+              </Button>
+              <Button onClick={runScan} disabled={scanning} className="gap-2">
+                {scanning ? <><Loader2 className="h-4 w-4 animate-spin" />Escaneando...</> : <><ScanLine className="h-4 w-4" />Escanear MTA</>}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         {scan && (
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
                 { label: "Resources", value: scan.total, cls: "bg-muted/50" },
-                { label: "Rodando", value: scan.running, cls: "bg-green-500/10 text-green-500" },
+                { label: "Rodando", value: scan.running || 0, cls: "bg-green-500/10 text-green-500" },
                 { label: "Detectados", value: scan.detectedItems || 0, cls: "bg-amber-500/10 text-amber-500" },
                 { label: "Pendentes", value: items.length, cls: "bg-blue-500/10 text-blue-500" },
+                { label: "Último Scan", value: scan.trigger || "—", cls: "bg-purple-500/10 text-purple-500 text-sm" },
               ].map(s => (
                 <div key={s.label} className={`text-center p-3 rounded-lg ${s.cls}`}>
-                  <p className="text-2xl font-bold">{s.value}</p>
+                  <p className="text-xl font-bold">{s.value}</p>
                   <p className="text-xs text-muted-foreground">{s.label}</p>
                 </div>
               ))}
             </div>
+            {scan.scannedAt && (
+              <p className="text-xs text-muted-foreground mt-3">
+                Escaneado em: {new Date(scan.scannedAt * 1000).toLocaleString("pt-BR")}
+                {scan.trigger && ` por ${scan.trigger}`}
+              </p>
+            )}
           </CardContent>
         )}
       </Card>
 
+      {/* Tabs */}
       {scan && (
         <>
           <div className="flex gap-1 border-b">
-            {(["detected", "all"] as const).map(tab => (
+            {(["pending", "all", "products"] as const).map(tab => (
               <button key={tab} onClick={() => setView(tab)}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${view === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
-                {tab === "detected" ? `Detectados (${items.length})` : `Todos (${scan.total})`}
+                {tab === "pending" ? `Pendentes (${items.length})` : tab === "all" ? `Resources (${scan.total})` : `Produtos Criados`}
               </button>
             ))}
           </div>
 
-          {view === "detected" && (
+          {/* PENDENTES - Itens detectados aguardando decisão */}
+          {view === "pending" && (
             <Card>
               <CardContent className="pt-6">
                 {items.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Todos os itens já foram criados!</p>
+                  <div className="text-center py-12">
+                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                    <p className="font-medium mb-1">Nenhum item pendente!</p>
+                    <p className="text-sm text-muted-foreground">Todos os itens já foram processados ou descartados.</p>
+                  </div>
                 ) : (
                   <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">Defina o preço e clique em <strong>Criar</strong>. O produto fica inativo até você ativar na aba Produtos.</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Revise cada item: defina o <strong>nome</strong>, <strong>preço</strong> e escolha <strong>Criar</strong> ou <strong>Descartar</strong>.
+                      </p>
+                      <Button size="sm" variant="outline" onClick={createAll} className="gap-2">
+                        <CheckCircle className="h-3.5 w-3.5" />Criar Todos ({items.length})
+                      </Button>
+                    </div>
+
                     {items.map((item, idx) => (
-                      <div key={idx} className="border rounded-xl p-4 space-y-3">
-                        <div className="flex gap-2 flex-wrap">
-                          <Badge variant="outline" className={`text-xs ${catColor(item.category)}`}>{item.category.toUpperCase()}</Badge>
-                          <span className="text-xs text-muted-foreground font-mono">{item.resourceName}</span>
-                          {item.autoDetected && <Badge variant="secondary" className="text-xs">✓ Auto</Badge>}
+                      <div key={idx} className="border rounded-xl p-4 space-y-3 hover:border-primary/30 transition-colors">
+                        {/* Header com badge e resource */}
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex gap-2 flex-wrap items-center">
+                            <span className="text-lg">{catIcon(item.category)}</span>
+                            <Badge variant="outline" className={`text-xs ${catColor(item.category)}`}>{item.category.toUpperCase()}</Badge>
+                            <span className="text-xs text-muted-foreground font-mono">/{item.mtaCommand}</span>
+                            <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">{item.resourceName}</span>
+                            {item.autoDetected && <Badge variant="secondary" className="text-xs">Auto-detect</Badge>}
+                          </div>
+                          <button onClick={() => discardItem(idx)} className="text-xs text-red-400 hover:text-red-300 transition-colors">
+                            Descartar
+                          </button>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="sm:col-span-2 space-y-1">
-                            <label className="text-xs text-muted-foreground">Nome do produto</label>
+
+                        {/* Nome e Descrição */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Nome do Produto</label>
                             <Input value={item.editName}
                               onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, editName: e.target.value } : p))}
                               className="h-9" />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs text-muted-foreground">Preço (R$) *</label>
-                            <Input type="number" min="0" step="0.01" placeholder="29.90" value={item.editPrice}
-                              onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, editPrice: e.target.value } : p))}
+                            <label className="text-xs text-muted-foreground">Descrição</label>
+                            <Input value={item.editDesc}
+                              onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, editDesc: e.target.value } : p))}
                               className="h-9" />
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 font-mono">
-                          <span className="text-primary">{item.mtaCommand}</span>
-                          <span>{JSON.stringify(item.mtaParams)}</span>
+
+                        {/* Preço e Comando */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Preço (R$) *</label>
+                            <Input type="number" min="0" step="0.01" placeholder="29.90" value={item.editPrice}
+                              onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, editPrice: e.target.value } : p))}
+                              className="h-9 font-bold text-lg" />
+                          </div>
+                          <div className="sm:col-span-2 space-y-1">
+                            <label className="text-xs text-muted-foreground">Parâmetros MTA</label>
+                            <div className="flex items-center gap-2 text-xs bg-muted/40 rounded-lg px-3 py-2 font-mono h-9">
+                              <span className="text-primary font-bold">{item.mtaCommand}</span>
+                              <span className="text-muted-foreground">{JSON.stringify(item.mtaParams)}</span>
+                            </div>
+                          </div>
                         </div>
-                        <Button size="sm" className="w-full" onClick={() => createItem(item)}
-                          disabled={!item.editPrice || parseFloat(item.editPrice) <= 0}>
-                          <Plug className="h-3.5 w-3.5 mr-2" />Criar Produto
-                        </Button>
+
+                        {/* Comandos Lua detectados */}
+                        {item.luaCommands && item.luaCommands.length > 0 && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                            <span className="font-medium">Comandos no .lua:</span>
+                            {item.luaCommands.slice(0, 6).map((cmd, i) => (
+                              <span key={i} className="font-mono text-teal-500 bg-teal-500/10 px-1.5 py-0.5 rounded">/{cmd}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Botões de ação */}
+                        <div className="flex gap-2">
+                          <Button size="sm" className="flex-1 gap-2" onClick={() => createItem(item, false)}
+                            disabled={!item.editPrice || parseFloat(item.editPrice) <= 0}>
+                            <Plug className="h-3.5 w-3.5" />Criar (Inativo)
+                          </Button>
+                          <Button size="sm" variant="default" className="flex-1 gap-2 bg-green-600 hover:bg-green-700" onClick={() => createItem(item, true)}
+                            disabled={!item.editPrice || parseFloat(item.editPrice) <= 0}>
+                            <CheckCircle className="h-3.5 w-3.5" />Criar e Ativar
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -921,6 +1040,7 @@ function ResourcesTab() {
             </Card>
           )}
 
+          {/* ALL RESOURCES */}
           {view === "all" && (
             <Card>
               <CardHeader>
@@ -946,16 +1066,32 @@ function ResourcesTab() {
               </CardContent>
             </Card>
           )}
+
+          {/* PRODUTOS */}
+          {view === "products" && (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground mb-4">Produtos criados a partir dos scans. Ative/desative na aba <strong>Produtos</strong>.</p>
+                <Button onClick={() => qc.invalidateQueries({ queryKey: ["/api/admin/products"] })} variant="outline" className="gap-2">
+                  <RefreshCw className="h-4 w-4" />Ver na aba Produtos
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
+      {/* Empty state */}
       {!scan && !scanning && (
         <Card>
           <CardContent className="text-center py-16">
             <ScanLine className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="font-medium mb-1">Nenhum scan realizado</p>
-            <p className="text-sm text-muted-foreground mb-4">Clique em "Escanear" para detectar VIPs, veículos e outros mods vendáveis.</p>
-            <Button onClick={runScan}><ScanLine className="h-4 w-4 mr-2" />Escanear agora</Button>
+            <p className="font-medium mb-1">Nenhum scan disponível</p>
+            <p className="text-sm text-muted-foreground mb-4">Abra o Scanner App e envie os mods, ou clique em "Escanear MTA" para buscar direto do servidor.</p>
+            <div className="flex gap-2 justify-center">
+              <Button onClick={loadScanData} variant="outline" className="gap-2"><RefreshCw className="h-4 w-4" />Buscar Último Scan</Button>
+              <Button onClick={runScan} className="gap-2"><ScanLine className="h-4 w-4" />Escanear MTA</Button>
+            </div>
           </CardContent>
         </Card>
       )}

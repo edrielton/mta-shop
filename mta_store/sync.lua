@@ -183,9 +183,13 @@ addCommandHandler("loja",  cmdLoja, false, false)
 addCommandHandler("store", cmdLoja, false, false)
 addCommandHandler("shop",  cmdLoja, false, false)
 
--- Conecta ao iniciar
+-- Conecta ao iniciar (MySQL opcional — loja funciona sem ele)
 addEventHandler("onResourceStart", resourceRoot, function()
-    connectDB()
+    local conn = connectDB()
+    if not conn then
+        log("AVISO: MySQL nao conectado. Sync de dados do jogador desativado.")
+        log("A loja (scan/activate/health) continua funcionando normalmente.")
+    end
     log("Sync iniciado. /loja | /store | /shop")
 end)
 

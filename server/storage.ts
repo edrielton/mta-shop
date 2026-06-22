@@ -1,5 +1,5 @@
 import {
-  users, products, transactions, systemLogs, mtaSettings, userSessions, playerTokens, playerData,
+  users, products, transactions, systemLogs, mtaSettings, userSessions, playerTokens, playerData, scannerData,
   type User, type InsertUser,
   type Product, type InsertProduct,
   type Transaction, type InsertTransaction,
@@ -7,6 +7,7 @@ import {
   type MtaSettings, type InsertMtaSettings,
   type UserSession, type InsertUserSession,
   type PlayerToken, type PlayerDataRow,
+  type ScannerData, type InsertScannerData,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lt, isNull, or } from "drizzle-orm";
@@ -85,6 +86,10 @@ export interface IStorage {
     suspiciousActivity: number;
     lockedAccounts: number;
   }>;
+
+  // Scanner data
+  getLatestScannerData(): Promise<ScannerData | undefined>;
+  saveScannerData(data: InsertScannerData): Promise<ScannerData>;
 }
 
 // Threshold: bloqueia após N tentativas falhas por X minutos
@@ -491,6 +496,18 @@ export class DatabaseStorage implements IStorage {
       suspiciousActivity: suspiciousTxs.length,
       lockedAccounts: lockedUsers.length,
     };
+  }
+
+  // ── SCANNER DATA ───────────────────────────────────────────────
+
+  async getLatestScannerData(): Promise<ScannerData | undefined> {
+    const [latest] = await db.select().from(scannerData).orderBy(desc(scannerData.createdAt)).limit(1);
+    return latest || undefined;
+  }
+
+  async saveScannerData(data: InsertScannerData): Promise<ScannerData> {
+    const [inserted] = await db.insert(scannerData).values(data).returning();
+    return inserted;
   }
 }
 

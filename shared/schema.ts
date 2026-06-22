@@ -119,6 +119,19 @@ export const mtaSettings = pgTable("mta_settings", {
 });
 
 
+// Scanner data (último scan recebido do scanner app)
+export const scannerData = pgTable("scanner_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").notNull().default("scanner_app"),
+  trigger: text("trigger"),
+  totalResources: integer("total_resources").default(0),
+  detectedItems: integer("detected_items").default(0),
+  scannedAt: timestamp("scanned_at").defaultNow(),
+  resources: jsonb("resources").default([]),
+  detected: jsonb("detected").default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Player tokens (auto-login via MTA)
 export const playerTokens = pgTable("player_tokens", {
   id:        varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -199,6 +212,9 @@ export const insertSystemLogSchema = createInsertSchema(systemLogs).omit({ id: t
 export const insertMtaSettingsSchema = createInsertSchema(mtaSettings).omit({
   id: true, createdAt: true, updatedAt: true, lastHealthCheck: true, healthStatus: true,
 });
+export const insertScannerDataSchema = createInsertSchema(scannerData).omit({
+  id: true, createdAt: true,
+});
 export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
   id: true, createdAt: true, lastSeenAt: true,
 });
@@ -218,6 +234,9 @@ export type SystemLog = typeof systemLogs.$inferSelect;
 
 export type InsertMtaSettings = z.infer<typeof insertMtaSettingsSchema>;
 export type MtaSettings = typeof mtaSettings.$inferSelect;
+
+export type InsertScannerData = z.infer<typeof insertScannerDataSchema>;
+export type ScannerData = typeof scannerData.$inferSelect;
 
 export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
 export type UserSession = typeof userSessions.$inferSelect;

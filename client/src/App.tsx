@@ -10,6 +10,7 @@ import { Header } from "@/components/header";
 import AdminGuard from "@/components/AdminGuard";
 import NotFound from "@/pages/not-found";
 import PlayerDashboard from "@/pages/player-dashboard";
+import ResourcesPage from "@/pages/resources";
 import Home from "@/pages/home";
 import AuthPage from "@/pages/auth";
 import ProductsPage from "@/pages/products";
@@ -59,6 +60,7 @@ function MainRouter() {
       <Route path="/entrar"            component={PlayerDashboard} />
       <Route path="/products"          component={ProductsPage} />
       <Route path="/products/:id"      component={ProductDetailPage} />
+      <Route path="/resources"         component={ResourcesPage} />
       <Route path="/dashboard"         component={DashboardPage} />
       <Route path="/checkout/success"  component={CheckoutSuccessPage} />
       <Route path="/checkout/cancel"   component={CheckoutCancelPage} />

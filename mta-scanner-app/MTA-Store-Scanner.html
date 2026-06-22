@@ -3,73 +3,98 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MTA Store Scanner v2.0</title>
+<title>MTA Store Scanner v4.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0f1117; --bg2: #1e2130; --bg3: #252a3a;
-    --border: #2d3448; --text: #e2e8f0; --muted: #64748b;
-    --primary: #3b82f6; --green: #22c55e; --amber: #f59e0b;
-    --red: #ef4444; --purple: #a855f7; --teal: #14b8a6;
+    --bg: #0c0e14; --bg2: #161925; --bg3: #202434; --bg4: #2a2f42;
+    --border: #2d3348; --text: #e2e8f0; --muted: #64748b;
+    --primary: #6366f1; --primary-glow: rgba(99,102,241,.15);
+    --green: #22c55e; --amber: #fbbf24; --red: #ef4444;
+    --purple: #a855f7; --teal: #14b8a6; --pink: #ec4899;
   }
-  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
-  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
-  .header h1 { font-size: 18px; color: var(--primary); font-weight: 700; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 16px 28px; display: flex; align-items: center; gap: 14px; position: relative; overflow: hidden; }
+  .header::after { content:''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--primary), var(--purple), var(--teal)); }
+  .header h1 { font-size: 20px; color: var(--primary); font-weight: 800; letter-spacing: -.02em; }
   .header span { color: var(--muted); font-size: 13px; }
-  .main { max-width: 1100px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
-  .card-body { padding: 16px 18px; }
-  .field { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .field label { min-width: 160px; color: var(--muted); font-size: 13px; }
-  .field input { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; transition: border .15s; }
-  .field input:focus { border-color: var(--primary); }
+  .header .ver { margin-left: auto; color: var(--primary); font-size: 12px; font-weight: 700; font-family: monospace; background: var(--primary-glow); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(99,102,241,.3); }
+
+  .main { max-width: 1200px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: border-color .2s; }
+  .card:hover { border-color: rgba(99,102,241,.3); }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+  .card-header::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+  .card-body { padding: 18px 20px; }
+
+  .field { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .field label { min-width: 150px; color: var(--muted); font-size: 13px; font-weight: 500; }
+  .field input { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 13px; outline: none; transition: all .2s; }
+  .field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
   .field input.error { border-color: var(--red); }
   .field .hint { color: var(--muted); font-size: 12px; white-space: nowrap; }
-  .field .error-msg { color: var(--red); font-size: 12px; display: none; }
+
   .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .btn { padding: 9px 18px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity .15s, transform .1s; display: flex; align-items: center; gap: 6px; }
-  .btn:hover { opacity: .85; }
-  .btn:active { transform: scale(.97); }
-  .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 700; transition: all .15s; display: flex; align-items: center; gap: 7px; letter-spacing: .01em; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; transform: none; box-shadow: none; }
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-green { background: var(--green); color: #fff; }
   .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-  .badge-count { margin-left: auto; color: var(--muted); font-size: 12px; }
-  .progress-wrap { height: 4px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
-  .progress-bar { height: 100%; background: var(--primary); border-radius: 99px; width: 0%; transition: width .2s; }
-  .status-text { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-  .stat { background: var(--bg3); border-radius: 8px; padding: 12px; text-align: center; }
-  .stat-val { font-size: 22px; font-weight: 700; }
-  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+  .badge-count { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 600; }
+
+  .progress-wrap { height: 4px; background: var(--bg3); border-radius: 99px; overflow: hidden; margin-top: 14px; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary), var(--purple)); border-radius: 99px; width: 0%; transition: width .3s ease; }
+  .status-text { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; transition: all .2s; }
+  .stat:hover { border-color: rgba(99,102,241,.3); transform: translateY(-2px); }
+  .stat-val { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
   .stat.vip .stat-val { color: var(--amber); }
   .stat.vehicle .stat-val { color: var(--primary); }
   .stat.coins .stat-val { color: var(--green); }
+  .stat.weapons .stat-val { color: var(--pink); }
   .stat.all .stat-val { color: var(--text); }
+
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { background: var(--bg3); color: var(--muted); font-weight: 600; padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
-  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  thead th { background: var(--bg3); color: var(--muted); font-weight: 700; padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: all .15s; }
   tbody tr:hover { background: var(--bg3); }
-  tbody td { padding: 9px 12px; }
-  .tag { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; border: 1px solid; }
-  .tag-vip { color: var(--amber); background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); }
-  .tag-vehicle { color: var(--primary); background: rgba(59,130,246,.1); border-color: rgba(59,130,246,.3); }
-  .tag-coins { color: var(--green); background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.3); }
-  .tag-item { color: var(--purple); background: rgba(168,85,247,.1); border-color: rgba(168,85,247,.3); }
-  .tag-other { color: var(--muted); background: rgba(100,116,139,.1); border-color: rgba(100,116,139,.3); }
-  .auto-check { color: var(--green); font-size: 16px; }
-  .cmd-pill { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 11px; color: var(--teal); }
-  .empty { text-align: center; color: var(--muted); padding: 40px; }
-  .log { background: var(--bg); border-radius: 6px; padding: 10px; height: 110px; overflow-y: auto; font-family: monospace; font-size: 12px; color: var(--muted); }
+  tbody td { padding: 10px 14px; }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,.01); }
+
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 700; border: 1px solid; letter-spacing: .04em; }
+  .tag-vip { color: var(--amber); background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.25); }
+  .tag-vehicle { color: var(--primary); background: var(--primary-glow); border-color: rgba(99,102,241,.25); }
+  .tag-coins { color: var(--green); background: rgba(34,197,94,.08); border-color: rgba(34,197,94,.25); }
+  .tag-item { color: var(--purple); background: rgba(168,85,247,.08); border-color: rgba(168,85,247,.25); }
+  .tag-other { color: var(--muted); background: rgba(100,116,139,.08); border-color: rgba(100,116,139,.25); }
+
+  .auto-check { color: var(--green); font-size: 14px; font-weight: 700; }
+  .cmd-pill { background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; font-family: 'Cascadia Code', monospace; font-size: 11px; color: var(--teal); }
+  .price-pill { background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.25); border-radius: 5px; padding: 2px 8px; font-family: 'Cascadia Code', monospace; font-size: 11px; color: var(--green); font-weight: 700; }
+
+  .empty { text-align: center; color: var(--muted); padding: 50px; }
+  .log { background: var(--bg); border-radius: 8px; padding: 12px; height: 100px; overflow-y: auto; font-family: 'Cascadia Code', monospace; font-size: 12px; color: var(--muted); }
   .log .ok  { color: var(--green); }
   .log .err { color: var(--red); }
   .log .inf { color: var(--primary); }
-  .log .warn { color: var(--amber); }
-  .alert { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: 8px; padding: 12px 16px; color: var(--amber); font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
-  .alert.error { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3); color: var(--red); }
-  @media (max-width: 600px) {
+
+  .alert { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.2); border-radius: 10px; padding: 14px 18px; color: var(--amber); font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+  .alert.error { background: rgba(239,68,68,.06); border-color: rgba(239,68,68,.2); color: var(--red); }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn .3s ease; }
+
+  @media (max-width: 700px) {
     .stats { grid-template-columns: repeat(2,1fr); }
     .field { flex-direction: column; align-items: flex-start; }
     .field label { min-width: unset; }
@@ -81,6 +106,7 @@
 <div class="header">
   <h1>MTA Store Scanner</h1>
   <span>Analisa seus mods e envia pro site automaticamente</span>
+  <span class="ver">v4.0</span>
 </div>
 
 <div class="main">
@@ -88,20 +114,19 @@
   <div class="alert" id="alertCompat" style="display:none">
     Seu navegador nao suporta leitura de pastas locais. Use <strong>Google Chrome</strong> ou <strong>Microsoft Edge</strong>.
   </div>
-
   <div class="alert error" id="alertError" style="display:none"></div>
 
-  <div class="card">
+  <div class="card fade-in">
     <div class="card-header">Configuracao</div>
     <div class="card-body">
       <div class="field">
         <label>URL do Site</label>
-        <input id="inUrl" type="url" placeholder="https://mtastore.site" />
-        <span class="hint">Comece com https://</span>
+        <input id="inUrl" type="url" value="https://mtastore.site" placeholder="https://mtastore.site" />
+        <span class="hint">https://</span>
       </div>
       <div class="field">
         <label>Token MTA Store</label>
-        <input id="inToken" type="password" placeholder="Mesmo token do config.lua" />
+        <input id="inToken" type="password" placeholder="Cole o token do config.lua" />
       </div>
       <div class="field">
         <label>Pasta Resources MTA</label>
@@ -111,29 +136,28 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-body" style="padding:14px 18px">
+  <div class="card fade-in">
+    <div class="card-body" style="padding:16px 20px">
       <div class="btn-row">
         <button class="btn btn-primary" id="btnScan" onclick="startScan()" disabled>Escanear Mods</button>
         <button class="btn btn-green" id="btnSend" onclick="sendToSite()" disabled>Enviar pro Site</button>
         <button class="btn btn-outline" id="btnExport" onclick="exportJson()" disabled>Exportar JSON</button>
         <span class="badge-count" id="badgeCount"></span>
       </div>
-      <div style="margin-top:12px">
-        <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
-        <div class="status-text" id="statusText">Selecione a pasta resources e clique em Escanear.</div>
-      </div>
+      <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="status-text" id="statusText">Selecione a pasta resources e clique em Escanear.</div>
     </div>
   </div>
 
   <div class="stats" id="statsRow" style="display:none">
-    <div class="stat all">  <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">Resources</div></div>
-    <div class="stat vip">  <div class="stat-val" id="stVip">0</div>   <div class="stat-lbl">VIP</div></div>
-    <div class="stat vehicle"><div class="stat-val" id="stVehicle">0</div><div class="stat-lbl">Veiculos</div></div>
-    <div class="stat coins"> <div class="stat-val" id="stCoins">0</div> <div class="stat-lbl">Moedas/Outros</div></div>
+    <div class="stat all fade-in">  <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">Resources</div></div>
+    <div class="stat vip fade-in">  <div class="stat-val" id="stVip">0</div>   <div class="stat-lbl">VIP</div></div>
+    <div class="stat vehicle fade-in"><div class="stat-val" id="stVehicle">0</div><div class="stat-lbl">Veiculos</div></div>
+    <div class="stat coins fade-in"> <div class="stat-val" id="stCoins">0</div> <div class="stat-lbl">Moedas</div></div>
+    <div class="stat weapons fade-in"> <div class="stat-val" id="stWeapons">0</div> <div class="stat-lbl">Armas/Outros</div></div>
   </div>
 
-  <div class="card">
+  <div class="card fade-in">
     <div class="card-header">Itens Detectados</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap">
@@ -143,22 +167,23 @@
               <th>Resource</th>
               <th>Categoria</th>
               <th>Item Detectado</th>
-              <th>Comandos (.lua)</th>
-              <th>Comando MTA</th>
+              <th>Comando Ativacao</th>
+              <th>Preco Est.</th>
+              <th>Comandos Lua</th>
               <th>Auto</th>
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="6" class="empty">Nenhum scan realizado ainda.</td></tr>
+            <tr><td colspan="7" class="empty">Nenhum scan realizado ainda.</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card fade-in">
     <div class="card-header">Log</div>
-    <div class="card-body" style="padding:10px 14px">
+    <div class="card-body" style="padding:12px 14px">
       <div class="log" id="logBox"></div>
     </div>
   </div>
@@ -186,11 +211,7 @@ function showError(msg) {
   el.style.display = 'flex';
   log(msg, 'err');
 }
-
-function hideError() {
-  document.getElementById('alertError').style.display = 'none';
-}
-
+function hideError() { document.getElementById('alertError').style.display = 'none'; }
 function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
 function setProgress(pct) { document.getElementById('progressBar').style.width = pct + '%'; }
 
@@ -204,17 +225,13 @@ function saveConfig() {
   localStorage.setItem('mta_scanner_url',   document.getElementById('inUrl').value);
   localStorage.setItem('mta_scanner_token', document.getElementById('inToken').value);
 }
-
 function loadConfig() {
-  document.getElementById('inUrl').value   = localStorage.getItem('mta_scanner_url') || '';
+  document.getElementById('inUrl').value   = localStorage.getItem('mta_scanner_url') || 'https://mtastore.site';
   document.getElementById('inToken').value = localStorage.getItem('mta_scanner_token') || '';
 }
 
 function updateButtons() {
-  const hasUrl   = validateUrl(document.getElementById('inUrl').value.trim());
-  const hasToken = document.getElementById('inToken').value.trim().length > 0;
-  const hasFolder = dirHandle !== null;
-  document.getElementById('btnScan').disabled = !hasFolder;
+  document.getElementById('btnScan').disabled = dirHandle === null;
 }
 
 document.getElementById('inUrl').addEventListener('input', updateButtons);
@@ -235,16 +252,31 @@ async function selectFolder() {
   }
 }
 
+const PRICE_ESTIMATES = {
+  vip: [19.90, 29.90, 49.90, 79.90, 99.90],
+  vehicle: [15.00, 25.00, 35.00, 50.00, 75.00],
+  coins: [5.00, 15.00, 30.00, 50.00],
+  weapon: [10.00, 20.00, 35.00],
+  other: [9.90, 19.90, 29.90],
+};
+
+function getEstimatedPrice(category, tierIndex) {
+  const prices = PRICE_ESTIMATES[category] || PRICE_ESTIMATES.other;
+  return tierIndex < prices.length ? prices[tierIndex] : prices[prices.length - 1];
+}
+
 function parseLua(content) {
-  const result = { commands: [], exports: [], vipTiers: [], setData: [] };
+  const result = { commands: [], vipTiers: [], setData: [], functions: [], exports: [] };
   for (const m of content.matchAll(/addCommandHandler\s*\(\s*["']([^"']+)["']/gi))
     if (!result.commands.includes(m[1])) result.commands.push(m[1]);
-  for (const m of content.matchAll(/^function\s+([a-zA-Z_]\w*)\s*\(/gm))
-    if (!result.exports.includes(m[1])) result.exports.push(m[1]);
   for (const m of content.matchAll(/(?:name|nome|label|tier|nivel|plano)\s*=\s*["']([^"']{2,30})["']/gi))
     if (!result.vipTiers.includes(m[1])) result.vipTiers.push(m[1]);
   for (const m of content.matchAll(/setElementData\s*\([^,]+,\s*["']([^"']+)["']/gi))
     if (!result.setData.includes(m[1])) result.setData.push(m[1]);
+  for (const m of content.matchAll(/^(?:export\s+)?function\s+([a-zA-Z_]\w*)\s*\(/gmi))
+    if (!result.functions.includes(m[1])) result.functions.push(m[1]);
+  for (const m of content.matchAll(/<export\s+.*?function="([^"]+)"/gi))
+    if (!result.exports.includes(m[1])) result.exports.push(m[1]);
   return result;
 }
 
@@ -252,6 +284,8 @@ const VIP_KWS     = ['vip','gold','ouro','prata','silver','bronze','diamond','di
 const VEHICLE_KWS = ['vehicle','veiculo','carro','garage','garagem','car','auto'];
 const COIN_KWS    = ['coin','moeda','economy','economia','cash','dinheiro','money'];
 const WEAPON_KWS  = ['weapon','arma','kit','gun','arsenal'];
+const HOUSE_KWS   = ['house','casa','property','propriedade','apartamento'];
+const JOB_KWS     = ['job','emprego','work','trabalho','farming'];
 
 const TIER_MAP = {
   gold:'VIP Gold', ouro:'VIP Ouro', prata:'VIP Prata', silver:'VIP Silver',
@@ -268,6 +302,8 @@ function classify(name, desc, luaList) {
   const allCmds   = luaList.flatMap(l => l.commands);
   const allTiers  = luaList.flatMap(l => l.vipTiers);
   const allSetData= luaList.flatMap(l => l.setData);
+  const allFuncs  = luaList.flatMap(l => l.functions);
+  const allExp    = luaList.flatMap(l => l.exports);
   const sellable = [];
   let category   = 'other';
 
@@ -275,6 +311,8 @@ function classify(name, desc, luaList) {
   const isVehicle = VEHICLE_KWS.some(k => all.includes(k));
   const isCoins   = COIN_KWS.some(k => all.includes(k));
   const isWeapon  = WEAPON_KWS.some(k => all.includes(k));
+  const isHouse   = HOUSE_KWS.some(k => all.includes(k));
+  const isJob     = JOB_KWS.some(k => all.includes(k));
 
   if (isVip) {
     category = 'vip';
@@ -288,55 +326,84 @@ function classify(name, desc, luaList) {
     for (const [kw, nice] of Object.entries(TIER_MAP)) {
       if (lname.includes(kw) && !found.some(f => f.name === nice)) found.push({ name: nice, id: kw });
     }
+    let idx = 0;
     if (found.length) {
       for (const t of found) {
         sellable.push({
-          suggestedName: t.name, suggestedDesc: t.name + ' — beneficios exclusivos no servidor.',
+          suggestedName: t.name, suggestedDesc: t.name + ' - beneficios exclusivos no servidor.',
           category: 'vip', mtaCommand: 'giveVip',
           mtaParams: { tier: t.id, days: 30, resource: name },
           autoDetected: true, resourceName: name, luaCommands: allCmds,
+          estimatedPrice: getEstimatedPrice('vip', idx++), functions: allFuncs, exports: allExp,
         });
       }
     } else {
       sellable.push({
-        suggestedName: 'VIP — ' + name, suggestedDesc: 'Acesso VIP do servidor.',
+        suggestedName: 'VIP - ' + name, suggestedDesc: 'Acesso VIP do servidor.',
         category: 'vip', mtaCommand: 'giveVip',
         mtaParams: { resource: name, days: 30 },
         autoDetected: false, resourceName: name, luaCommands: allCmds,
+        estimatedPrice: getEstimatedPrice('vip', 0), functions: allFuncs, exports: allExp,
       });
     }
   } else if (isVehicle) {
     category = 'vehicle';
-    sellable.push({
-      suggestedName: 'Veiculo — ' + name, suggestedDesc: 'Veiculo entregue no seu spawn.',
-      category: 'vehicle', mtaCommand: 'giveVehicle',
-      mtaParams: { resource: name },
-      autoDetected: false, resourceName: name, luaCommands: allCmds,
-    });
+    let idx = 0;
+    for (const tier of ['Basico','Standard','Premium','Exclusivo']) {
+      sellable.push({
+        suggestedName: 'Veiculo ' + tier + ' - ' + name, suggestedDesc: 'Veiculo ' + tier + ' entregue no spawn.',
+        category: 'vehicle', mtaCommand: 'giveVehicle',
+        mtaParams: { resource: name, tier: tier.toLowerCase() },
+        autoDetected: false, resourceName: name, luaCommands: allCmds,
+        estimatedPrice: getEstimatedPrice('vehicle', idx++), functions: allFuncs, exports: allExp,
+      });
+    }
   } else if (isCoins) {
     category = 'coins';
-    for (const amt of [1000, 5000, 15000]) {
+    let idx = 0;
+    for (const amt of [1000, 5000, 15000, 50000]) {
       sellable.push({
         suggestedName: amt.toLocaleString('pt-BR') + ' Moedas',
         suggestedDesc: 'Pacote de ' + amt.toLocaleString('pt-BR') + ' moedas.',
         category: 'coins', mtaCommand: 'giveCoins',
         mtaParams: { amount: amt, resource: name },
         autoDetected: false, resourceName: name, luaCommands: allCmds,
+        estimatedPrice: getEstimatedPrice('coins', idx++), functions: allFuncs, exports: allExp,
       });
     }
   } else if (isWeapon) {
     category = 'weapon';
-    for (const kit of ['starter','premium']) {
+    let idx = 0;
+    for (const kit of ['Starter','Premium','Elite']) {
       sellable.push({
-        suggestedName: 'Kit ' + kit.charAt(0).toUpperCase()+kit.slice(1),
-        suggestedDesc: 'Kit de armas ' + kit + '.',
+        suggestedName: 'Kit ' + kit + ' - ' + name, suggestedDesc: 'Kit de armas ' + kit.toLowerCase() + '.',
         category: 'item', mtaCommand: 'giveWeaponKit',
-        mtaParams: { kit, resource: name },
+        mtaParams: { kit: kit.toLowerCase(), resource: name },
         autoDetected: false, resourceName: name, luaCommands: allCmds,
+        estimatedPrice: getEstimatedPrice('weapon', idx++), functions: allFuncs, exports: allExp,
       });
     }
+  } else if (isHouse) {
+    let idx = 0;
+    for (const tier of ['Pequena','Media','Grande','Mansao']) {
+      sellable.push({
+        suggestedName: 'Propriedade ' + tier, suggestedDesc: 'Propriedade tipo ' + tier.toLowerCase() + '.',
+        category: 'item', mtaCommand: 'giveProperty',
+        mtaParams: { tier: tier.toLowerCase(), resource: name },
+        autoDetected: false, resourceName: name, luaCommands: allCmds,
+        estimatedPrice: getEstimatedPrice('other', idx++), functions: allFuncs, exports: allExp,
+      });
+    }
+  } else if (isJob) {
+    sellable.push({
+      suggestedName: 'VIP Emprego - ' + name, suggestedDesc: 'Acesso a empregos exclusivos.',
+      category: 'item', mtaCommand: 'giveJobAccess',
+      mtaParams: { resource: name },
+      autoDetected: false, resourceName: name, luaCommands: allCmds,
+      estimatedPrice: getEstimatedPrice('other', 0), functions: allFuncs, exports: allExp,
+    });
   }
-  return { category, sellable, commands: allCmds };
+  return { category, sellable, commands: allCmds, functions: allFuncs, exports: allExp };
 }
 
 async function readTextFile(fileHandle) {
@@ -366,7 +433,7 @@ async function startScan() {
   document.getElementById('btnScan').disabled   = true;
   document.getElementById('btnSend').disabled   = true;
   document.getElementById('btnExport').disabled = true;
-  document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" class="empty">Escaneando...</td></tr>';
+  document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="empty">Escaneando...</td></tr>';
   document.getElementById('statsRow').style.display = 'none';
 
   resources = []; detected = [];
@@ -377,7 +444,6 @@ async function startScan() {
     if (handle.kind === 'directory') entries.push(handle);
   }
   entries.sort((a,b) => a.name.localeCompare(b.name));
-
   const total = entries.length;
   let done = 0;
 
@@ -397,28 +463,26 @@ async function startScan() {
     try {
       for await (const [fname, fh] of resHandle.entries()) {
         if (fh.kind === 'file' && fname.endsWith('.lua')) {
-          const content = await readTextFile(fh);
-          luaList.push(parseLua(content));
+          luaList.push(parseLua(await readTextFile(fh)));
         }
       }
     } catch {}
 
-    const { category, sellable, commands } = classify(resHandle.name, meta.description, luaList);
+    const { category, sellable, commands, functions, exports } = classify(resHandle.name, meta.description, luaList);
 
-    const entry = {
+    resources.push({
       name: resHandle.name, description: meta.description, author: meta.author,
       version: meta.version, type: meta.type, category,
-      commands: [...new Set(commands)], sellable,
-    };
-
-    resources.push(entry);
+      commands: [...new Set(commands)], functions: [...new Set(functions)], exports: [...new Set(exports)],
+      sellable, luaFileCount: luaList.length,
+    });
     detected.push(...sellable);
   }
 
   renderTable();
   renderStats();
   setProgress(100);
-  setStatus('Scan concluido — ' + detected.length + ' item(ns) em ' + resources.length + ' resources.');
+  setStatus('Scan concluido - ' + detected.length + ' item(ns) em ' + resources.length + ' resources.');
   log('Concluido: ' + resources.length + ' resources, ' + detected.length + ' item(ns) detectado(s).', 'ok');
 
   document.getElementById('btnScan').disabled = false;
@@ -426,24 +490,26 @@ async function startScan() {
     document.getElementById('btnSend').disabled   = false;
     document.getElementById('btnExport').disabled = false;
   }
-  document.getElementById('badgeCount').textContent = detected.length + ' item(ns) / ' + resources.length + ' resources';
+  document.getElementById('badgeCount').textContent = detected.length + ' itens / ' + resources.length + ' resources';
 }
 
 function renderTable() {
   const tbody = document.getElementById('tableBody');
   if (!detected.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum item detectado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum item detectado.</td></tr>';
     return;
   }
   tbody.innerHTML = detected.map(item => {
     const cat  = item.category || 'other';
     const cmds = (item.luaCommands || []).slice(0,3).map(c => '<span class="cmd-pill">/' + c + '</span>').join(' ');
+    const price = 'R$ ' + (item.estimatedPrice || 0).toFixed(2);
     return '<tr>' +
       '<td><code style="font-size:12px;color:var(--teal)">' + item.resourceName + '</code></td>' +
       '<td><span class="tag tag-' + cat + '">' + cat.toUpperCase() + '</span></td>' +
-      '<td>' + item.suggestedName + '</td>' +
-      '<td>' + (cmds || '<span style="color:var(--muted)">—</span>') + '</td>' +
-      '<td><span class="cmd-pill">' + item.mtaCommand + '</span></td>' +
+      '<td style="font-weight:600">' + item.suggestedName + '</td>' +
+      '<td><span class="cmd-pill" style="color:var(--amber)">' + item.mtaCommand + '</span></td>' +
+      '<td><span class="price-pill">' + price + '</span></td>' +
+      '<td>' + (cmds || '<span style="color:var(--muted)">-</span>') + '</td>' +
       '<td>' + (item.autoDetected ? '<span class="auto-check">&#10003;</span>' : '') + '</td>' +
     '</tr>';
   }).join('');
@@ -453,7 +519,8 @@ function renderStats() {
   document.getElementById('stTotal').textContent   = resources.length;
   document.getElementById('stVip').textContent     = detected.filter(i=>i.category==='vip').length;
   document.getElementById('stVehicle').textContent = detected.filter(i=>i.category==='vehicle').length;
-  document.getElementById('stCoins').textContent   = detected.filter(i=>i.category==='coins'||i.category==='item').length;
+  document.getElementById('stCoins').textContent   = detected.filter(i=>i.category==='coins').length;
+  document.getElementById('stWeapons').textContent = detected.filter(i=>i.category==='item'||i.category==='other').length;
   document.getElementById('statsRow').style.display = 'grid';
 }
 
@@ -464,12 +531,11 @@ async function sendToSite() {
 
   if (!url) { showError('Informe a URL do site.'); return; }
   if (!validateUrl(url)) {
-    showError('URL invalida. Comece com https:// (ex: https://mtastore.site)');
+    showError('URL invalida. Comece com https://');
     document.getElementById('inUrl').classList.add('error');
     return;
   }
   document.getElementById('inUrl').classList.remove('error');
-
   if (!token) { showError('Informe o token.'); return; }
 
   saveConfig();
@@ -482,7 +548,7 @@ async function sendToSite() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Token': token },
       body: JSON.stringify({
-        source:    'scanner_app',
+        source:    'scanner_app_v4',
         trigger:   'MTA Scanner App (HTML)',
         total:     resources.length,
         detected,
@@ -490,29 +556,20 @@ async function sendToSite() {
         scannedAt: Math.floor(Date.now()/1000),
       }),
     });
-
     const data = await res.json();
-
     if (!res.ok) {
-      const errMsg = data.message || data.error || ('HTTP ' + res.status);
-      if (res.status === 401) {
-        showError('Token invalido. Verifique o token nas configuracoes do site.');
-      } else {
-        showError('Erro do servidor: ' + errMsg);
-      }
+      if (res.status === 401) showError('Token invalido. Verifique as configuracoes.');
+      else showError('Erro do servidor: ' + (data.message || data.error || 'HTTP ' + res.status));
       return;
     }
-
-    const msg = 'Enviado! ' + (data.total||detected.length) + ' item(ns), ' + (data.created||0) + ' produto(s) criado(s), ' + (data.skipped||0) + ' ja existiam.';
+    const msg = 'Enviado com sucesso! ' + (data.total||detected.length) + ' item(ns) detectado(s).';
     log(msg, 'ok');
     setStatus(msg);
   } catch(e) {
-    if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+    if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))
       showError('Nao foi possivel conectar ao site. Verifique a URL e se o site esta online.');
-    } else {
-      showError('Erro: ' + e.message);
-    }
-    setStatus('Erro ao enviar. Verifique o log.');
+    else showError('Erro: ' + e.message);
+    setStatus('Erro ao enviar.');
   } finally {
     document.getElementById('btnSend').disabled = false;
   }
@@ -523,16 +580,13 @@ function exportJson() {
   const blob = new Blob([data], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'mta_scan_result.json';
-  a.click();
+  a.href = url; a.download = 'mta_scan_result.json'; a.click();
   URL.revokeObjectURL(url);
   log('JSON exportado.', 'ok');
 }
 
 loadConfig();
 updateButtons();
-
 if (!('showDirectoryPicker' in window)) {
   document.getElementById('alertCompat').style.display = 'flex';
   document.getElementById('btnScan').disabled = true;

@@ -110,10 +110,10 @@ tbody td { padding: 10px 14px; font-size: 12px; }
     <nav class="nav">
       <div class="nav-item active" onclick="showPage('dashboard')"><span>📊</span> Dashboard</div>
       <div class="nav-item" onclick="showPage('products')"><span>📦</span> Produtos</div>
+      <div class="nav-item" onclick="showPage('resources')"><span>🎮</span> Resources MTA</div>
       <div class="nav-item" onclick="showPage('transactions')"><span>💳</span> Transações</div>
       <div class="nav-item" onclick="showPage('users')"><span>👥</span> Usuários</div>
-      <div class="nav-item" onclick="showPage('scanner')"><span>🔍</span> Scanner de Mods</div>
-      <div class="nav-item" onclick="showPage('mta')"><span>🎮</span> Configuração MTA</div>
+      <div class="nav-item" onclick="showPage('mta')"><span>⚙️</span> Configuração MTA</div>
       <div class="nav-item" onclick="showPage('logs')"><span>📋</span> Logs</div>
     </nav>
 
@@ -202,13 +202,15 @@ tbody td { padding: 10px 14px; font-size: 12px; }
       </div>
     </div>
 
-    <!-- Scanner -->
-    <div class="page" id="page-scanner">
+    <!-- Resources MTA -->
+    <div class="page" id="page-resources">
       <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
-        <button class="btn btn-primary" onclick="runScan()">🔍 Escanear Servidor MTA</button>
-        <span id="scanStatus" style="color:var(--muted);font-size:12px"></span>
+        <button class="btn btn-primary" onclick="loadScanData()">🔄 Atualizar Dados do Scanner</button>
+        <button class="btn btn-green" onclick="autoSyncFromScan()">🚀 Criar Produtos dos Dados</button>
+        <span id="resourceStatus" style="color:var(--muted);font-size:12px"></span>
       </div>
-      <div id="scanResults"></div>
+      <div id="scanDataInfo" style="margin-bottom:16px"></div>
+      <div id="resourceResults"></div>
     </div>
 
     <!-- Config MTA -->
@@ -328,7 +330,7 @@ window.onApiResponse = function(callId, success, responseStr) {
 };
 
 // ── Navegação ──────────────────────────────────────────────────────
-const pageTitles = { dashboard:"Dashboard", products:"Produtos", transactions:"Transações", users:"Usuários", scanner:"Scanner de Mods", mta:"Configuração MTA", logs:"Logs" };
+const pageTitles = { dashboard:"Dashboard", products:"Produtos", resources:"Resources MTA", transactions:"Transações", users:"Usuários", mta:"Configuração MTA", logs:"Logs" };
 
 function showPage(name) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
@@ -336,7 +338,7 @@ function showPage(name) {
   document.getElementById("page-" + name).classList.add("active");
   document.querySelectorAll(".nav-item")[Object.keys(pageTitles).indexOf(name)].classList.add("active");
   document.getElementById("pageTitle").textContent = pageTitles[name];
-  const loaders = { products: loadProducts, transactions: loadTransactions, users: loadUsers, logs: () => loadLogs("all"), mta: loadMtaSettings };
+  const loaders = { products: loadProducts, resources: loadScanData, transactions: loadTransactions, users: loadUsers, logs: () => loadLogs("all"), mta: loadMtaSettings };
   if (loaders[name]) loaders[name]();
 }
 
@@ -534,53 +536,77 @@ async function unlockUser(id) {
   } catch(e) { alert("Erro: " + e.message); }
 }
 
-// ── Scanner ────────────────────────────────────────────────────────
-async function runScan() {
-  document.getElementById("scanStatus").textContent = "Escaneando...";
-  document.getElementById("scanResults").innerHTML = "<div class='loading'><span class='spin'>⟳</span> Analisando mods...</div>";
+// ── Resources MTA (dados do scanner) ────────────────────────────────
+async function loadScanData() {
+  document.getElementById("resourceStatus").textContent = "Carregando...";
+  document.getElementById("resourceResults").innerHTML = "<div class='loading'><span class='spin'>⟳</span> Carregando dados do scanner...</div>";
   try {
-    const data = await apiCall("GET", "/api/admin/mta-scan");
-    const items = data.detected || [];
-    document.getElementById("scanStatus").textContent = `${items.length} item(ns) detectado(s)`;
-
-    if (items.length === 0) {
-      document.getElementById("scanResults").innerHTML = "<div class='loading'>Nenhum item vendável detectado.</div>";
+    const data = await apiCall("GET", "/api/admin/mta-scan-data");
+    
+    if (!data.success || !data.detected || data.detected.length === 0) {
+      document.getElementById("resourceStatus").textContent = "Nenhum scan recebido ainda.";
+      document.getElementById("resourceResults").innerHTML = `
+        <div class="card">
+          <div class="card-header">Nenhum Dado do Scanner</div>
+          <div style="padding:24px;text-align:center;color:var(--muted)">
+            <p style="font-size:14px;margin-bottom:8px">Nenhum scan foi recebido pelo site ainda.</p>
+            <p style="font-size:12px">Execute o <strong>MTA Store Scanner</strong> (app desktop ou HTML) e clique em "Enviar pro Site" para enviar os dados.</p>
+          </div>
+        </div>`;
       return;
     }
 
-    document.getElementById("scanResults").innerHTML = `
-      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
-        <strong>${items.length} item(ns) encontrado(s)</strong>
-        <button class="btn btn-green" onclick="autoSync()">🚀 Criar Todos Automaticamente</button>
-      </div>
-      ${items.map((item, idx) => `
-        <div class="scan-result">
-          <div class="scan-item-name">${esc(item.suggestedName)} <span class="badge badge-blue">${esc(item.category)}</span></div>
-          <div class="scan-item-meta">Resource: ${esc(item.resourceName)} | Cmd: ${esc(item.mtaCommand)} | ${esc(JSON.stringify(item.mtaParams || {}))}</div>
-          <div class="scan-item-actions">
-            <input class="price-input" id="price_${idx}" type="number" placeholder="Preço R$" step="0.01">
-            <button class="btn btn-primary" style="font-size:11px" onclick="createFromScan(${idx},'${item.resourceName}','${item.suggestedName}','${item.category}','${item.mtaCommand}',${JSON.stringify(JSON.stringify(item.mtaParams||{}))})">Criar</button>
-          </div>
-        </div>`).join("")}`;
-    window._scanItems = items;
+    const detected = data.detected || [];
+    const resources = data.resources || [];
+    const scannedAt = data.scannedAt ? new Date(data.scannedAt * 1000).toLocaleString("pt-BR") : "—";
+    
+    document.getElementById("resourceStatus").textContent = `${detected.length} itens detectados | Scan: ${scannedAt}`;
+    
+    document.getElementById("scanDataInfo").innerHTML = `
+      <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
+        <div class="stat-card blue"><div class="val">${resources.length}</div><div class="lbl">Resources</div></div>
+        <div class="stat-card amber"><div class="val">${detected.filter(i=>i.category==='vip').length}</div><div class="lbl">VIP</div></div>
+        <div class="stat-card blue"><div class="val">${detected.filter(i=>i.category==='vehicle').length}</div><div class="lbl">Veículos</div></div>
+        <div class="stat-card green"><div class="val">${detected.filter(i=>i.category==='coins').length}</div><div class="lbl">Moedas</div></div>
+        <div class="stat-card purple"><div class="val">${detected.length}</div><div class="lbl">Total Itens</div></div>
+      </div>`;
+
+    document.getElementById("resourceResults").innerHTML = `
+      <div class="card">
+        <div class="card-header">Itens Detectados pelo Scanner 
+          <span style="margin-left:auto;font-size:11px;color:var(--muted)">Último scan: ${scannedAt}</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Resource</th>
+                <th>Categoria</th>
+                <th>Item Detectado</th>
+                <th>Comando Ativação</th>
+                <th>Parâmetros</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detected.map(item => `
+                <tr>
+                  <td style="font-family:monospace;color:var(--teal);font-size:11px">${esc(item.resourceName)}</td>
+                  <td><span class="badge badge-${item.category === 'vip' ? 'amber' : item.category === 'vehicle' ? 'blue' : item.category === 'coins' ? 'green' : 'purple'}">${esc(item.category)}</span></td>
+                  <td style="font-weight:600">${esc(item.suggestedName)}</td>
+                  <td><code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--amber)">${esc(item.mtaCommand)}</code></td>
+                  <td style="font-size:11px;color:var(--muted);font-family:monospace">${esc(JSON.stringify(item.mtaParams || {}))}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
   } catch(e) {
-    document.getElementById("scanStatus").textContent = "Erro: " + e.message;
-    document.getElementById("scanResults").innerHTML = `<div class='loading' style='color:var(--red)'>Erro: ${e.message}</div>`;
+    document.getElementById("resourceStatus").textContent = "Erro: " + e.message;
+    document.getElementById("resourceResults").innerHTML = `<div class='loading' style='color:var(--red)'>Erro: ${e.message}</div>`;
   }
 }
 
-async function createFromScan(idx, resourceName, name, category, cmd, paramsStr) {
-  const price = document.getElementById("price_"+idx)?.value;
-  if (!price || parseFloat(price) <= 0) { alert("Defina o preço antes de criar."); return; }
-  try {
-    let params = {};
-    try { params = JSON.parse(paramsStr); } catch {}
-    await apiCall("POST", "/api/admin/products", { name, description: `${name} — gerado via scanner`, sku: `AUTO-${resourceName}-${cmd}-${Date.now()}`, price, currency:"BRL", category, mtaCommand:cmd, mtaParams:params, isActive:false });
-    alert(`"${name}" criado! Ative-o na aba Produtos.`);
-  } catch(e) { alert("Erro: " + e.message); }
-}
-
-async function autoSync() {
+async function autoSyncFromScan() {
   try {
     const r = await apiCall("POST", "/api/admin/mta-auto-sync");
     alert(`${r.created} produto(s) criado(s), ${r.skipped} já existiam.`);
