@@ -9,7 +9,6 @@ import { db } from "./db";
 import { registerRoutes } from "./routes";
 import { setupWebSocket } from "./websocket";
 import { serveStatic } from "./static";
-import { serveMtaAdminPanelStatic } from "./mtaAdminStatic";
 import { createServer } from "http";
 
 
@@ -76,10 +75,6 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
   setupWebSocket(httpServer);
-  // Serve o HTML do admin-panel para o guiBrowser (http/https)
-  serveMtaAdminPanelStatic(app);
-
-
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
