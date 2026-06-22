@@ -1499,6 +1499,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       res.json(data);
     } catch (error) {
+      console.error("[mta-scan] Erro:", error);
       const msg = error instanceof Error ? error.message : "Erro desconhecido";
       res.status(500).json({ message: `Falha ao escanear: ${msg}` });
     }

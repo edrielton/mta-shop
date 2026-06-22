@@ -1,4 +1,4 @@
-# MTA Store Scanner v1.1 - Compativel com PowerShell 5.1+
+# MTA Store Scanner v2.0 - Compativel com PowerShell 5.1+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -34,8 +34,15 @@ function SaveConfig($url, $token, $folder) {
     @{ url=$url; token=$token; folder=$folder } | ConvertTo-Json | Set-Content $configFile -Encoding UTF8
 }
 
-# ── Helpers para PS5 (sem ??) ─────────────────────────────────────
 function Coalesce($a, $b) { if ($null -ne $a -and $a -ne "") { return $a } return $b }
+
+function Validate-Url($url) {
+    if (-not $url) { return $false }
+    try {
+        $u = [System.Uri]$url
+        return ($u.Scheme -eq "http" -or $u.Scheme -eq "https")
+    } catch { return $false }
+}
 
 # ── Parsers Lua ───────────────────────────────────────────────────────
 $VIP_KWS     = @("vip","gold","ouro","prata","silver","bronze","diamond","diamante","platina","platinum","premium","doador","rank","vip1","vip2","vip3")
@@ -137,11 +144,11 @@ function ClassifyResource($name, $desc, $luaList) {
     return @{ category=$category; sellable=$sellable; commands=$allCmds }
 }
 
-# ── Formulário ───────────────────────────────────────────────────────
+# ── Formulario ───────────────────────────────────────────────────────
 $cfg = LoadConfig
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "MTA Store Scanner v1.1"
+$form.Text = "MTA Store Scanner v2.0"
 $form.Size = New-Object System.Drawing.Size(980,720)
 $form.MinimumSize = New-Object System.Drawing.Size(800,580)
 $form.BackColor = $BG; $form.ForeColor = $TEXT; $form.Font = $FONT
@@ -269,7 +276,6 @@ $bScan.Add_Click({
         Status "Escaneando: $($dir.Name) ($done/$total)"
         [System.Windows.Forms.Application]::DoEvents()
 
-        # meta.xml
         $meta = @{ description=""; author=""; version="?"; type="misc" }
         $mpath = Join-Path $dir.FullName "meta.xml"
         if (Test-Path $mpath) {
@@ -285,7 +291,6 @@ $bScan.Add_Click({
             } catch {}
         }
 
-        # Arquivos Lua
         $luaList = @()
         $luaFiles = Get-ChildItem -Path $dir.FullName -Filter "*.lua" -File -ErrorAction SilentlyContinue
         foreach ($lf in $luaFiles) { $luaList += ParseLua $lf.FullName }
@@ -305,7 +310,6 @@ $bScan.Add_Click({
         $global:Resources += $entry
         $global:Detected  += $result.sellable
 
-        # Adiciona na lista
         foreach ($item in $result.sellable) {
             $cat  = (Coalesce $item.category "other")
             $cmds = ($item.luaCommands | Select-Object -First 4 | ForEach-Object { "/$_" }) -join "  "
@@ -334,8 +338,17 @@ $bScan.Add_Click({
 $bSend.Add_Click({
     $url   = $tUrl.Text.Trim().TrimEnd("/")
     $token = $tTk.Text.Trim()
-    if (-not $url)   { [System.Windows.Forms.MessageBox]::Show("Informe a URL do site.","Atencao")|Out-Null; return }
-    if (-not $token) { [System.Windows.Forms.MessageBox]::Show("Informe o token.","Atencao")|Out-Null; return }
+
+    if (-not $url) {
+        [System.Windows.Forms.MessageBox]::Show("Informe a URL do site.","Atencao")|Out-Null; return
+    }
+    if (-not (Validate-Url $url)) {
+        [System.Windows.Forms.MessageBox]::Show("URL invalida. Comece com https:// (ex: https://mtastore.site)","Atencao")|Out-Null; return
+    }
+    if (-not $token) {
+        [System.Windows.Forms.MessageBox]::Show("Informe o token.","Atencao")|Out-Null; return
+    }
+
     SaveConfig $url $token $global:FolderPath
     $bSend.Enabled=$false; Log "Enviando para $url..." $PRIMARY; [System.Windows.Forms.Application]::DoEvents()
     try {
@@ -346,8 +359,19 @@ $bSend.Add_Click({
         [System.Windows.Forms.MessageBox]::Show($msg,"Sucesso!",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)|Out-Null
     } catch {
         $e = $_.Exception.Message
-        Log "ERRO: $e" $RED; Status "Erro ao enviar."
-        [System.Windows.Forms.MessageBox]::Show("Erro: $e","Erro",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)|Out-Null
+        if ($e -match "401|Unauthorized") {
+            Log "ERRO: Token invalido. Verifique o token nas configuracoes do site." $RED
+            [System.Windows.Forms.MessageBox]::Show("Token invalido. Verifique o token nas configuracoes do site.","Erro",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)|Out-Null
+        } elseif ($e -match "404|Not Found") {
+            Log "ERRO: Endpoint nao encontrado. Verifique a URL do site." $RED
+            [System.Windows.Forms.MessageBox]::Show("Endpoint nao encontrado. Verifique a URL do site.","Erro",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)|Out-Null
+        } elseif ($e -match "timeout|timed out") {
+            Log "ERRO: Tempo esgotado. O site pode estar offline." $RED
+            [System.Windows.Forms.MessageBox]::Show("Tempo esgotado. O site pode estar offline.","Erro",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)|Out-Null
+        } else {
+            Log "ERRO: $e" $RED; Status "Erro ao enviar."
+            [System.Windows.Forms.MessageBox]::Show("Erro: $e","Erro",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)|Out-Null
+        }
     }
     $bSend.Enabled=$true
 })

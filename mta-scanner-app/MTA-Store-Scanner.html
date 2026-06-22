@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MTA Store Scanner v1.0</title>
+<title>MTA Store Scanner v2.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -13,28 +13,20 @@
     --red: #ef4444; --purple: #a855f7; --teal: #14b8a6;
   }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
-
-  /* Header */
   .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
   .header h1 { font-size: 18px; color: var(--primary); font-weight: 700; }
   .header span { color: var(--muted); font-size: 13px; }
-
-  /* Main layout */
   .main { max-width: 1100px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-
-  /* Cards */
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
   .card-body { padding: 16px 18px; }
-
-  /* Form */
   .field { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .field label { min-width: 160px; color: var(--muted); font-size: 13px; }
   .field input { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; transition: border .15s; }
   .field input:focus { border-color: var(--primary); }
+  .field input.error { border-color: var(--red); }
   .field .hint { color: var(--muted); font-size: 12px; white-space: nowrap; }
-
-  /* Buttons */
+  .field .error-msg { color: var(--red); font-size: 12px; display: none; }
   .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .btn { padding: 9px 18px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity .15s, transform .1s; display: flex; align-items: center; gap: 6px; }
   .btn:hover { opacity: .85; }
@@ -44,13 +36,9 @@
   .btn-green { background: var(--green); color: #fff; }
   .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
   .badge-count { margin-left: auto; color: var(--muted); font-size: 12px; }
-
-  /* Progress */
   .progress-wrap { height: 4px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
   .progress-bar { height: 100%; background: var(--primary); border-radius: 99px; width: 0%; transition: width .2s; }
   .status-text { color: var(--muted); font-size: 12px; margin-top: 6px; }
-
-  /* Stats */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .stat { background: var(--bg3); border-radius: 8px; padding: 12px; text-align: center; }
   .stat-val { font-size: 22px; font-weight: 700; }
@@ -59,8 +47,6 @@
   .stat.vehicle .stat-val { color: var(--primary); }
   .stat.coins .stat-val { color: var(--green); }
   .stat.all .stat-val { color: var(--text); }
-
-  /* Table */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { background: var(--bg3); color: var(--muted); font-weight: 600; padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
@@ -76,17 +62,13 @@
   .auto-check { color: var(--green); font-size: 16px; }
   .cmd-pill { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 11px; color: var(--teal); }
   .empty { text-align: center; color: var(--muted); padding: 40px; }
-
-  /* Log */
   .log { background: var(--bg); border-radius: 6px; padding: 10px; height: 110px; overflow-y: auto; font-family: monospace; font-size: 12px; color: var(--muted); }
   .log .ok  { color: var(--green); }
   .log .err { color: var(--red); }
   .log .inf { color: var(--primary); }
-
-  /* Alert */
+  .log .warn { color: var(--amber); }
   .alert { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: 8px; padding: 12px 16px; color: var(--amber); font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
-
-  /* Responsive */
+  .alert.error { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3); color: var(--red); }
   @media (max-width: 600px) {
     .stats { grid-template-columns: repeat(2,1fr); }
     .field { flex-direction: column; align-items: flex-start; }
@@ -97,25 +79,25 @@
 <body>
 
 <div class="header">
-  <h1>⚡ MTA Store Scanner</h1>
+  <h1>MTA Store Scanner</h1>
   <span>Analisa seus mods e envia pro site automaticamente</span>
 </div>
 
 <div class="main">
 
-  <!-- Alerta de compatibilidade -->
   <div class="alert" id="alertCompat" style="display:none">
-    ⚠️ Seu navegador não suporta leitura de pastas locais. Use <strong>Google Chrome</strong> ou <strong>Microsoft Edge</strong>.
+    Seu navegador nao suporta leitura de pastas locais. Use <strong>Google Chrome</strong> ou <strong>Microsoft Edge</strong>.
   </div>
 
-  <!-- Configuração -->
+  <div class="alert error" id="alertError" style="display:none"></div>
+
   <div class="card">
-    <div class="card-header">⚙️ Configuração</div>
+    <div class="card-header">Configuracao</div>
     <div class="card-body">
       <div class="field">
         <label>URL do Site</label>
-        <input id="inUrl" type="url" placeholder="https://seusite.railway.app" />
-        <span class="hint">Sem barra no final</span>
+        <input id="inUrl" type="url" placeholder="https://mtastore.site" />
+        <span class="hint">Comece com https://</span>
       </div>
       <div class="field">
         <label>Token MTA Store</label>
@@ -124,18 +106,17 @@
       <div class="field">
         <label>Pasta Resources MTA</label>
         <input id="inFolder" type="text" placeholder='Clique em "Selecionar Pasta"' readonly style="cursor:default" />
-        <button class="btn btn-outline" onclick="selectFolder()">📁 Selecionar Pasta</button>
+        <button class="btn btn-outline" onclick="selectFolder()">Selecionar Pasta</button>
       </div>
     </div>
   </div>
 
-  <!-- Ações -->
   <div class="card">
     <div class="card-body" style="padding:14px 18px">
       <div class="btn-row">
-        <button class="btn btn-primary" id="btnScan" onclick="startScan()" disabled>🔍 Escanear Mods</button>
-        <button class="btn btn-green" id="btnSend" onclick="sendToSite()" disabled>🚀 Enviar pro Site</button>
-        <button class="btn btn-outline" id="btnExport" onclick="exportJson()" disabled>💾 Exportar JSON</button>
+        <button class="btn btn-primary" id="btnScan" onclick="startScan()" disabled>Escanear Mods</button>
+        <button class="btn btn-green" id="btnSend" onclick="sendToSite()" disabled>Enviar pro Site</button>
+        <button class="btn btn-outline" id="btnExport" onclick="exportJson()" disabled>Exportar JSON</button>
         <span class="badge-count" id="badgeCount"></span>
       </div>
       <div style="margin-top:12px">
@@ -145,17 +126,15 @@
     </div>
   </div>
 
-  <!-- Estatísticas -->
   <div class="stats" id="statsRow" style="display:none">
     <div class="stat all">  <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">Resources</div></div>
     <div class="stat vip">  <div class="stat-val" id="stVip">0</div>   <div class="stat-lbl">VIP</div></div>
-    <div class="stat vehicle"><div class="stat-val" id="stVehicle">0</div><div class="stat-lbl">Veículos</div></div>
+    <div class="stat vehicle"><div class="stat-val" id="stVehicle">0</div><div class="stat-lbl">Veiculos</div></div>
     <div class="stat coins"> <div class="stat-val" id="stCoins">0</div> <div class="stat-lbl">Moedas/Outros</div></div>
   </div>
 
-  <!-- Tabela de resultados -->
   <div class="card">
-    <div class="card-header">📦 Itens Detectados</div>
+    <div class="card-header">Itens Detectados</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap">
         <table>
@@ -177,9 +156,8 @@
     </div>
   </div>
 
-  <!-- Log -->
   <div class="card">
-    <div class="card-header">📋 Log</div>
+    <div class="card-header">Log</div>
     <div class="card-body" style="padding:10px 14px">
       <div class="log" id="logBox"></div>
     </div>
@@ -188,12 +166,10 @@
 </div>
 
 <script>
-// ── Estado global ─────────────────────────────────────────────────────
 let dirHandle  = null;
 let resources  = [];
 let detected   = [];
 
-// ── Utilidades ────────────────────────────────────────────────────────
 function log(msg, cls='') {
   const box = document.getElementById('logBox');
   const ts  = new Date().toLocaleTimeString('pt-BR');
@@ -204,8 +180,25 @@ function log(msg, cls='') {
   box.scrollTop = box.scrollHeight;
 }
 
+function showError(msg) {
+  const el = document.getElementById('alertError');
+  el.textContent = msg;
+  el.style.display = 'flex';
+  log(msg, 'err');
+}
+
+function hideError() {
+  document.getElementById('alertError').style.display = 'none';
+}
+
 function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
 function setProgress(pct) { document.getElementById('progressBar').style.width = pct + '%'; }
+
+function validateUrl(url) {
+  if (!url) return false;
+  try { const u = new URL(url); return u.protocol === 'http:' || u.protocol === 'https:'; }
+  catch { return false; }
+}
 
 function saveConfig() {
   localStorage.setItem('mta_scanner_url',   document.getElementById('inUrl').value);
@@ -217,7 +210,16 @@ function loadConfig() {
   document.getElementById('inToken').value = localStorage.getItem('mta_scanner_token') || '';
 }
 
-// ── Selecionar pasta ──────────────────────────────────────────────────
+function updateButtons() {
+  const hasUrl   = validateUrl(document.getElementById('inUrl').value.trim());
+  const hasToken = document.getElementById('inToken').value.trim().length > 0;
+  const hasFolder = dirHandle !== null;
+  document.getElementById('btnScan').disabled = !hasFolder;
+}
+
+document.getElementById('inUrl').addEventListener('input', updateButtons);
+document.getElementById('inToken').addEventListener('input', updateButtons);
+
 async function selectFolder() {
   if (!('showDirectoryPicker' in window)) {
     document.getElementById('alertCompat').style.display = 'flex';
@@ -226,33 +228,23 @@ async function selectFolder() {
   try {
     dirHandle = await window.showDirectoryPicker();
     document.getElementById('inFolder').value = dirHandle.name;
-    document.getElementById('btnScan').disabled = false;
-    log(`Pasta selecionada: ${dirHandle.name}`, 'inf');
+    updateButtons();
+    log('Pasta selecionada: ' + dirHandle.name, 'inf');
   } catch(e) {
     if (e.name !== 'AbortError') log('Erro ao selecionar pasta: ' + e.message, 'err');
   }
 }
 
-// ── Parsers Lua ───────────────────────────────────────────────────────
 function parseLua(content) {
   const result = { commands: [], exports: [], vipTiers: [], setData: [] };
-
-  // addCommandHandler("cmd", ...)
   for (const m of content.matchAll(/addCommandHandler\s*\(\s*["']([^"']+)["']/gi))
     if (!result.commands.includes(m[1])) result.commands.push(m[1]);
-
-  // function name(
   for (const m of content.matchAll(/^function\s+([a-zA-Z_]\w*)\s*\(/gm))
     if (!result.exports.includes(m[1])) result.exports.push(m[1]);
-
-  // tier/name = "valor"
   for (const m of content.matchAll(/(?:name|nome|label|tier|nivel|plano)\s*=\s*["']([^"']{2,30})["']/gi))
     if (!result.vipTiers.includes(m[1])) result.vipTiers.push(m[1]);
-
-  // setElementData(el, "chave"
   for (const m of content.matchAll(/setElementData\s*\([^,]+,\s*["']([^"']+)["']/gi))
     if (!result.setData.includes(m[1])) result.setData.push(m[1]);
-
   return result;
 }
 
@@ -265,7 +257,7 @@ const TIER_MAP = {
   gold:'VIP Gold', ouro:'VIP Ouro', prata:'VIP Prata', silver:'VIP Silver',
   bronze:'VIP Bronze', diamond:'VIP Diamond', diamante:'VIP Diamante',
   platina:'VIP Platina', platinum:'VIP Platinum',
-  vip1:'VIP Nível 1', vip2:'VIP Nível 2', vip3:'VIP Nível 3',
+  vip1:'VIP Nivel 1', vip2:'VIP Nivel 2', vip3:'VIP Nivel 3',
   premium:'VIP Premium', doador:'VIP Doador',
 };
 
@@ -273,11 +265,9 @@ function classify(name, desc, luaList) {
   const lname = name.toLowerCase();
   const ldesc = (desc||'').toLowerCase();
   const all   = lname + ' ' + ldesc;
-
   const allCmds   = luaList.flatMap(l => l.commands);
   const allTiers  = luaList.flatMap(l => l.vipTiers);
   const allSetData= luaList.flatMap(l => l.setData);
-
   const sellable = [];
   let category   = 'other';
 
@@ -289,92 +279,69 @@ function classify(name, desc, luaList) {
   if (isVip) {
     category = 'vip';
     const found = [];
-
-    // De tabelas Lua
     for (const tv of allTiers) {
       const tvl = tv.toLowerCase();
       for (const [kw, nice] of Object.entries(TIER_MAP)) {
-        if (tvl.includes(kw) && !found.some(f => f.name === nice)) {
-          found.push({ name: nice, id: kw });
-        }
+        if (tvl.includes(kw) && !found.some(f => f.name === nice)) found.push({ name: nice, id: kw });
       }
     }
-    // Do nome do resource
     for (const [kw, nice] of Object.entries(TIER_MAP)) {
-      if (lname.includes(kw) && !found.some(f => f.name === nice)) {
-        found.push({ name: nice, id: kw });
-      }
+      if (lname.includes(kw) && !found.some(f => f.name === nice)) found.push({ name: nice, id: kw });
     }
-
     if (found.length) {
       for (const t of found) {
         sellable.push({
-          suggestedName: t.name,
-          suggestedDesc: `${t.name} — benefícios exclusivos no servidor.`,
+          suggestedName: t.name, suggestedDesc: t.name + ' — beneficios exclusivos no servidor.',
           category: 'vip', mtaCommand: 'giveVip',
           mtaParams: { tier: t.id, days: 30, resource: name },
-          autoDetected: true, resourceName: name,
-          luaCommands: allCmds,
+          autoDetected: true, resourceName: name, luaCommands: allCmds,
         });
       }
     } else {
       sellable.push({
-        suggestedName: `VIP — ${name}`,
-        suggestedDesc: 'Acesso VIP do servidor.',
+        suggestedName: 'VIP — ' + name, suggestedDesc: 'Acesso VIP do servidor.',
         category: 'vip', mtaCommand: 'giveVip',
         mtaParams: { resource: name, days: 30 },
-        autoDetected: false, resourceName: name,
-        luaCommands: allCmds,
+        autoDetected: false, resourceName: name, luaCommands: allCmds,
       });
     }
-
   } else if (isVehicle) {
     category = 'vehicle';
     sellable.push({
-      suggestedName: `Veículo — ${name}`,
-      suggestedDesc: 'Veículo entregue no seu spawn.',
+      suggestedName: 'Veiculo — ' + name, suggestedDesc: 'Veiculo entregue no seu spawn.',
       category: 'vehicle', mtaCommand: 'giveVehicle',
       mtaParams: { resource: name },
-      autoDetected: false, resourceName: name,
-      luaCommands: allCmds,
+      autoDetected: false, resourceName: name, luaCommands: allCmds,
     });
-
   } else if (isCoins) {
     category = 'coins';
     for (const amt of [1000, 5000, 15000]) {
       sellable.push({
-        suggestedName: `${amt.toLocaleString('pt-BR')} Moedas`,
-        suggestedDesc: `Pacote de ${amt.toLocaleString('pt-BR')} moedas.`,
+        suggestedName: amt.toLocaleString('pt-BR') + ' Moedas',
+        suggestedDesc: 'Pacote de ' + amt.toLocaleString('pt-BR') + ' moedas.',
         category: 'coins', mtaCommand: 'giveCoins',
         mtaParams: { amount: amt, resource: name },
-        autoDetected: false, resourceName: name,
-        luaCommands: allCmds,
+        autoDetected: false, resourceName: name, luaCommands: allCmds,
       });
     }
-
   } else if (isWeapon) {
     category = 'weapon';
     for (const kit of ['starter','premium']) {
       sellable.push({
-        suggestedName: `Kit ${kit.charAt(0).toUpperCase()+kit.slice(1)}`,
-        suggestedDesc: `Kit de armas ${kit}.`,
+        suggestedName: 'Kit ' + kit.charAt(0).toUpperCase()+kit.slice(1),
+        suggestedDesc: 'Kit de armas ' + kit + '.',
         category: 'item', mtaCommand: 'giveWeaponKit',
         mtaParams: { kit, resource: name },
-        autoDetected: false, resourceName: name,
-        luaCommands: allCmds,
+        autoDetected: false, resourceName: name, luaCommands: allCmds,
       });
     }
   }
-
   return { category, sellable, commands: allCmds };
 }
 
-// ── Lê arquivos da pasta ──────────────────────────────────────────────
 async function readTextFile(fileHandle) {
-  try {
-    const file = await fileHandle.getFile();
-    return await file.text();
-  } catch { return ''; }
+  try { const file = await fileHandle.getFile(); return await file.text(); }
+  catch { return ''; }
 }
 
 async function parseMetaXml(text) {
@@ -391,9 +358,9 @@ async function parseMetaXml(text) {
   } catch { return { description:'', author:'', version:'?', type:'misc' }; }
 }
 
-// ── Scan principal ────────────────────────────────────────────────────
 async function startScan() {
   if (!dirHandle) return;
+  hideError();
   saveConfig();
 
   document.getElementById('btnScan').disabled   = true;
@@ -417,9 +384,8 @@ async function startScan() {
   for (const resHandle of entries) {
     done++;
     setProgress(Math.round(done/total*100));
-    setStatus(`Escaneando: ${resHandle.name} (${done}/${total})`);
+    setStatus('Escaneando: ' + resHandle.name + ' (' + done + '/' + total + ')');
 
-    // meta.xml
     let meta = { description:'', author:'', version:'?', type:'misc' };
     try {
       const mh = await resHandle.getFileHandle('meta.xml');
@@ -427,7 +393,6 @@ async function startScan() {
       meta = await parseMetaXml(mt);
     } catch {}
 
-    // Arquivos Lua
     const luaList = [];
     try {
       for await (const [fname, fh] of resHandle.entries()) {
@@ -441,14 +406,9 @@ async function startScan() {
     const { category, sellable, commands } = classify(resHandle.name, meta.description, luaList);
 
     const entry = {
-      name:        resHandle.name,
-      description: meta.description,
-      author:      meta.author,
-      version:     meta.version,
-      type:        meta.type,
-      category,
-      commands:    [...new Set(commands)],
-      sellable,
+      name: resHandle.name, description: meta.description, author: meta.author,
+      version: meta.version, type: meta.type, category,
+      commands: [...new Set(commands)], sellable,
     };
 
     resources.push(entry);
@@ -458,39 +418,37 @@ async function startScan() {
   renderTable();
   renderStats();
   setProgress(100);
-  setStatus(`✅ Scan concluído — ${detected.length} item(ns) em ${resources.length} resources.`);
-  log(`Concluído: ${resources.length} resources, ${detected.length} item(ns) detectado(s).`, 'ok');
+  setStatus('Scan concluido — ' + detected.length + ' item(ns) em ' + resources.length + ' resources.');
+  log('Concluido: ' + resources.length + ' resources, ' + detected.length + ' item(ns) detectado(s).', 'ok');
 
   document.getElementById('btnScan').disabled = false;
   if (detected.length > 0) {
     document.getElementById('btnSend').disabled   = false;
     document.getElementById('btnExport').disabled = false;
   }
-  document.getElementById('badgeCount').textContent = `${detected.length} item(ns) / ${resources.length} resources`;
+  document.getElementById('badgeCount').textContent = detected.length + ' item(ns) / ' + resources.length + ' resources';
 }
 
-// ── Renderiza tabela ──────────────────────────────────────────────────
 function renderTable() {
   const tbody = document.getElementById('tableBody');
   if (!detected.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum item vendável detectado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum item detectado.</td></tr>';
     return;
   }
   tbody.innerHTML = detected.map(item => {
     const cat  = item.category || 'other';
-    const cmds = (item.luaCommands || []).slice(0,3).map(c => `<span class="cmd-pill">/${c}</span>`).join(' ');
-    return `<tr>
-      <td><code style="font-size:12px;color:var(--teal)">${item.resourceName}</code></td>
-      <td><span class="tag tag-${cat}">${cat.toUpperCase()}</span></td>
-      <td>${item.suggestedName}</td>
-      <td>${cmds || '<span style="color:var(--muted)">—</span>'}</td>
-      <td><span class="cmd-pill">${item.mtaCommand}</span></td>
-      <td>${item.autoDetected ? '<span class="auto-check">✓</span>' : ''}</td>
-    </tr>`;
+    const cmds = (item.luaCommands || []).slice(0,3).map(c => '<span class="cmd-pill">/' + c + '</span>').join(' ');
+    return '<tr>' +
+      '<td><code style="font-size:12px;color:var(--teal)">' + item.resourceName + '</code></td>' +
+      '<td><span class="tag tag-' + cat + '">' + cat.toUpperCase() + '</span></td>' +
+      '<td>' + item.suggestedName + '</td>' +
+      '<td>' + (cmds || '<span style="color:var(--muted)">—</span>') + '</td>' +
+      '<td><span class="cmd-pill">' + item.mtaCommand + '</span></td>' +
+      '<td>' + (item.autoDetected ? '<span class="auto-check">&#10003;</span>' : '') + '</td>' +
+    '</tr>';
   }).join('');
 }
 
-// ── Estatísticas ──────────────────────────────────────────────────────
 function renderStats() {
   document.getElementById('stTotal').textContent   = resources.length;
   document.getElementById('stVip').textContent     = detected.filter(i=>i.category==='vip').length;
@@ -499,16 +457,24 @@ function renderStats() {
   document.getElementById('statsRow').style.display = 'grid';
 }
 
-// ── Envia pro site ────────────────────────────────────────────────────
 async function sendToSite() {
-  const url   = document.getElementById('inUrl').value.trim().replace(/\/$/,'');
+  hideError();
+  let url = document.getElementById('inUrl').value.trim().replace(/\/+$/, '');
   const token = document.getElementById('inToken').value.trim();
-  if (!url)   { alert('Informe a URL do site.'); return; }
-  if (!token) { alert('Informe o token.'); return; }
+
+  if (!url) { showError('Informe a URL do site.'); return; }
+  if (!validateUrl(url)) {
+    showError('URL invalida. Comece com https:// (ex: https://mtastore.site)');
+    document.getElementById('inUrl').classList.add('error');
+    return;
+  }
+  document.getElementById('inUrl').classList.remove('error');
+
+  if (!token) { showError('Informe o token.'); return; }
 
   saveConfig();
   document.getElementById('btnSend').disabled = true;
-  log('Enviando para o site...', 'inf');
+  log('Enviando para ' + url + '...', 'inf');
   setStatus('Enviando dados...');
 
   try {
@@ -526,22 +492,32 @@ async function sendToSite() {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
 
-    const msg = `✅ Enviado! ${data.total||detected.length} item(ns), ${data.created||0} produto(s) criado(s), ${data.skipped||0} já existiam.`;
+    if (!res.ok) {
+      const errMsg = data.message || data.error || ('HTTP ' + res.status);
+      if (res.status === 401) {
+        showError('Token invalido. Verifique o token nas configuracoes do site.');
+      } else {
+        showError('Erro do servidor: ' + errMsg);
+      }
+      return;
+    }
+
+    const msg = 'Enviado! ' + (data.total||detected.length) + ' item(ns), ' + (data.created||0) + ' produto(s) criado(s), ' + (data.skipped||0) + ' ja existiam.';
     log(msg, 'ok');
     setStatus(msg);
-    alert(msg);
   } catch(e) {
-    log('ERRO: ' + e.message, 'err');
-    setStatus('❌ Erro ao enviar. Verifique o log.');
-    alert('Erro: ' + e.message);
+    if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+      showError('Nao foi possivel conectar ao site. Verifique a URL e se o site esta online.');
+    } else {
+      showError('Erro: ' + e.message);
+    }
+    setStatus('Erro ao enviar. Verifique o log.');
   } finally {
     document.getElementById('btnSend').disabled = false;
   }
 }
 
-// ── Exportar JSON ─────────────────────────────────────────────────────
 function exportJson() {
   const data = JSON.stringify({ resources, detected }, null, 2);
   const blob = new Blob([data], { type: 'application/json' });
@@ -554,8 +530,8 @@ function exportJson() {
   log('JSON exportado.', 'ok');
 }
 
-// ── Init ──────────────────────────────────────────────────────────────
 loadConfig();
+updateButtons();
 
 if (!('showDirectoryPicker' in window)) {
   document.getElementById('alertCompat').style.display = 'flex';
