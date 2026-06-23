@@ -1548,6 +1548,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("[mta-scan] Erro:", error);
       const msg = error instanceof Error ? error.message : "Erro desconhecido";
+
+      if (msg.includes("ECONNREFUSED") || msg.includes("connect")) {
+        return res.status(503).json({ message: "Servidor MTA offline ou inacessível. Verifique as configurações." });
+      }
+      if (msg.includes("ETIMEDOUT") || msg.includes("timeout") || msg.includes("AbortError")) {
+        return res.status(504).json({ message: "Servidor MTA não respondeu a tempo (15s). Verifique se está rodando." });
+      }
+
       res.status(500).json({ message: `Falha ao escanear: ${msg}` });
     }
   });
