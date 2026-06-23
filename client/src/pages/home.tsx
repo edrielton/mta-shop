@@ -78,6 +78,24 @@ export default function Home() {
         <GlowPulse className="absolute top-20 left-[15%] w-72 h-72 rounded-full bg-primary/5 blur-[100px]" />
         <GlowPulse className="absolute bottom-20 right-[10%] w-96 h-96 rounded-full bg-primary/5 blur-[120px]" />
 
+        {/* Dragon */}
+        <div className="absolute right-[-5%] top-1/2 -translate-y-1/2 w-[480px] h-[480px] opacity-60 pointer-events-none select-none dragon-float hidden lg:block">
+          <img
+            src="/images/dragon.svg"
+            alt=""
+            className="w-full h-full drop-shadow-[0_0_60px_rgba(99,102,241,0.4)]"
+          />
+          {/* Dragon glow aura */}
+          <div className="absolute inset-0 rounded-full bg-primary/10 blur-[80px] animate-pulse" />
+        </div>
+
+        {/* Floating particles around dragon */}
+        <div className="absolute right-[8%] top-[20%] w-2 h-2 rounded-full bg-purple-500/60 particle-float hidden lg:block" style={{ animationDelay: "0s" }} />
+        <div className="absolute right-[15%] top-[35%] w-1.5 h-1.5 rounded-full bg-primary/50 particle-float hidden lg:block" style={{ animationDelay: "0.5s" }} />
+        <div className="absolute right-[5%] top-[60%] w-2.5 h-2.5 rounded-full bg-indigo-400/40 particle-float hidden lg:block" style={{ animationDelay: "1s" }} />
+        <div className="absolute right-[12%] top-[75%] w-1 h-1 rounded-full bg-violet-500/50 particle-float hidden lg:block" style={{ animationDelay: "1.5s" }} />
+        <div className="absolute right-[20%] top-[45%] w-1.5 h-1.5 rounded-full bg-primary/40 particle-float hidden lg:block" style={{ animationDelay: "2s" }} />
+
         {/* Grid pattern overlay */}
         <div
           className="absolute inset-0 opacity-[0.03]"
