@@ -132,6 +132,20 @@ export const scannerData = pgTable("scanner_data", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Pending activations (polling reverso: MTA busca ativações pendentes)
+export const pendingActivations = pgTable("pending_activations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: text("transaction_id").notNull(),
+  serial: text("serial"),
+  account: text("account"),
+  command: text("command").notNull(),
+  params: jsonb("params").default({}),
+  status: text("status").notNull().default("pending"), // pending | processed | failed
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
 // Player tokens (auto-login via MTA)
 export const playerTokens = pgTable("player_tokens", {
   id:        varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -216,7 +216,23 @@ async function sendMtaActivation(
     const result = await response.json();
     return { success: result.success, error: result.error };
   } catch (error) {
-    return { success: false, error: `Cannot connect to MTA: ${error instanceof Error ? error.message : "Unknown"}` };
+    // MTA offline → salva na fila de polling
+    const errorMsg = error instanceof Error ? error.message : "Unknown";
+    try {
+      const user = userId ? await storage.getUser(userId) : null;
+      const product = productId ? await storage.getProduct(productId) : null;
+      if (product) {
+        await storage.createPendingActivation({
+          transactionId,
+          serial: user?.mtaSerial || undefined,
+          account: user?.mtaAccount || undefined,
+          command: product.mtaCommand || "unknown",
+          params: product.mtaParams || {},
+        });
+        return { success: false, error: `MTA offline — na fila de polling: ${errorMsg}` };
+      }
+    } catch {}
+    return { success: false, error: `Cannot connect to MTA: ${errorMsg}` };
   }
 }
 
@@ -1819,6 +1835,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Player data error:", error);
       res.status(500).json({ message: "Erro ao buscar dados" });
+    }
+  });
+
+  // ── POLLING: MTA busca ativações pendentes ────────────────────
+  app.get("/api/player/pending-activations", async (req, res) => {
+    try {
+      const apiToken = req.headers["x-api-token"];
+      const settings = await storage.getMtaSettings();
+      if (!settings || apiToken !== settings.apiToken) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const serial = req.query.serial as string | undefined;
+      const activations = await storage.getPendingActivations(serial);
+      res.json({ success: true, count: activations.length, activations });
+    } catch (error) {
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/api/player/activations/:id/process", async (req, res) => {
+    try {
+      const apiToken = req.headers["x-api-token"];
+      const settings = await storage.getMtaSettings();
+      if (!settings || apiToken !== settings.apiToken) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { status, error } = req.body;
+      await storage.markActivationProcessed(req.params.id, status || "processed", error);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Internal error" });
     }
   });
 

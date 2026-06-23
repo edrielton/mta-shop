@@ -1,5 +1,5 @@
 import {
-  users, products, transactions, systemLogs, mtaSettings, userSessions, playerTokens, playerData, scannerData,
+  users, products, transactions, systemLogs, mtaSettings, userSessions, playerTokens, playerData, scannerData, pendingActivations,
   type User, type InsertUser,
   type Product, type InsertProduct,
   type Transaction, type InsertTransaction,
@@ -76,6 +76,11 @@ export interface IStorage {
 
   // User by MTA serial
   getUserByMtaSerial(serial: string): Promise<User | undefined>;
+
+  // Pending activations (polling reverso)
+  createPendingActivation(data: { transactionId: string; serial?: string; account?: string; command: string; params?: any }): Promise<void>;
+  getPendingActivations(serial?: string): Promise<any[]>;
+  markActivationProcessed(id: string, status: string, error?: string): Promise<void>;
 
   // Admin stats
   getAdminStats(): Promise<{
@@ -508,6 +513,32 @@ export class DatabaseStorage implements IStorage {
   async saveScannerData(data: InsertScannerData): Promise<ScannerData> {
     const [inserted] = await db.insert(scannerData).values(data).returning();
     return inserted;
+  }
+
+  // ── PENDING ACTIVATIONS (polling reverso) ─────────────────────
+
+  async createPendingActivation(data: { transactionId: string; serial?: string; account?: string; command: string; params?: any }): Promise<void> {
+    await db.insert(pendingActivations).values({
+      transactionId: data.transactionId,
+      serial: data.serial || null,
+      account: data.account || null,
+      command: data.command,
+      params: data.params || {},
+      status: "pending",
+    });
+  }
+
+  async getPendingActivations(serial?: string): Promise<any[]> {
+    const where = serial
+      ? and(eq(pendingActivations.status, "pending"), eq(pendingActivations.serial, serial))
+      : eq(pendingActivations.status, "pending");
+    return db.select().from(pendingActivations).where(where).orderBy(pendingActivations.createdAt);
+  }
+
+  async markActivationProcessed(id: string, status: string, error?: string): Promise<void> {
+    await db.update(pendingActivations)
+      .set({ status, error: error || null, processedAt: new Date() })
+      .where(eq(pendingActivations.id, id));
   }
 }
 

@@ -204,6 +204,56 @@ local function isPlayerAdmin(player)
     return isObjectInACLGroup("user." .. getAccountName(acc), group)
 end
 
+-- ── POLLING: busca ativações pendentes do site ─────────────────
+local function pollPendingActivations()
+    fetchRemote(MTA_STORE_SITE_URL .. "/api/player/pending-activations", {
+        method = "GET",
+        headers = { ["X-API-Token"] = MTA_STORE_TOKEN },
+        connectTimeout = 10000,
+        readTimeout = 10000,
+    }, function(response, errno)
+        if errno ~= 0 then return end
+        local data = fromJSON(response)
+        if not data or not data.success or not data.activations then return end
+
+        for _, act in ipairs(data.activations) do
+            local player = nil
+            if act.serial and act.serial ~= "" then player = getPlayerBySerial(act.serial) end
+            if not player and act.account and act.account ~= "" then
+                for _, p in ipairs(getElementsByType("player")) do
+                    local acc = getPlayerAccount(p)
+                    if acc and getAccountName(acc) == act.account then player = p; break end
+                end
+            end
+
+            if player then
+                local h = handlers[act.command]
+                if h then
+                    local ok, msg = h(player, act.params)
+                    if ok then
+                        log("Poll OK: " .. act.command .. " para " .. getPlayerName(player))
+                        fetchRemote(MTA_STORE_SITE_URL .. "/api/player/activations/" .. act.id .. "/process", {
+                            method = "POST",
+                            postData = toJSON({ status = "processed" }),
+                            headers = { ["Content-Type"] = "application/json", ["X-API-Token"] = MTA_STORE_TOKEN },
+                            connectTimeout = 5000, readTimeout = 5000,
+                        }, function() end)
+                    else
+                        fetchRemote(MTA_STORE_SITE_URL .. "/api/player/activations/" .. act.id .. "/process", {
+                            method = "POST",
+                            postData = toJSON({ status = "failed", error = msg }),
+                            headers = { ["Content-Type"] = "application/json", ["X-API-Token"] = MTA_STORE_TOKEN },
+                            connectTimeout = 5000, readTimeout = 5000,
+                        }, function() end)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+setTimer(pollPendingActivations, 30000, 0)
+
 -- /storesync
 local function doSync(player)
     local isConsole   = (player == nil)
