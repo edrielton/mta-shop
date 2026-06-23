@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { useWebSocket } from "@/lib/useWebSocket";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -895,8 +896,29 @@ function ResourcesTab() {
     r.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Auto-load scan data on mount
+  // Auto-load scan data on mount + listen for real-time updates via WebSocket
+  const { subscribe, connected } = useWebSocket();
+
   useEffect(() => { loadScanData(); }, []);
+
+  // Escuta novos scans em tempo real via WebSocket
+  useEffect(() => {
+    const unsub = subscribe("admin:scan_received", (data: any) => {
+      toast({
+        title: "Novo scan recebido!",
+        description: data.message || `${data.total || 0} item(ns) detectado(s).`,
+      });
+      loadScanData();
+    });
+    return unsub;
+  }, [subscribe]);
+
+  // Fallback: polling a cada 15s se WebSocket não conectou
+  useEffect(() => {
+    if (connected) return;
+    const interval = setInterval(() => { loadScanData(); }, 15000);
+    return () => clearInterval(interval);
+  }, [connected]);
 
   return (
     <div className="space-y-6">
