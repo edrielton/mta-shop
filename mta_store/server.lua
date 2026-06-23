@@ -316,9 +316,10 @@ local function doSync(player)
         headers={["Content-Type"]="application/json",["X-API-Token"]=MTA_STORE_TOKEN},
         connectTimeout=15000, readTimeout=15000,
     }, function(response, errno)
-        if errno ~= 0 then
-            log("ERRO sync errno: " .. errno)
-            if not isConsole then chat(player, "Erro ao conectar (errno " .. errno .. ").") end
+        local errCode = type(errno) == "table" and (errno.code or 0) or (tonumber(errno) or 0)
+        if errCode ~= 0 then
+            log("ERRO sync errno: " .. tostring(errCode))
+            if not isConsole then chat(player, "Erro ao conectar (errno " .. tostring(errCode) .. ").") end
             return
         end
         local data = fromJSON(response) or {}

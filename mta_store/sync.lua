@@ -40,9 +40,10 @@ local function postToSite(endpoint, data, cb)
         connectTimeout = 10000,
         readTimeout    = 10000,
     }, function(response, errno)
-        if errno ~= 0 then
+        local errCode = type(errno) == "table" and (errno.code or 0) or (tonumber(errno) or 0)
+        if errCode ~= 0 then
             if MTA_STORE_DEBUG then
-                log("ERRO POST " .. endpoint .. " errno=" .. tostring(errno))
+                log("ERRO POST " .. endpoint .. " errno=" .. tostring(errCode))
             end
             return
         end

@@ -6,6 +6,7 @@
         description="MTA Store - Loja online integrada"
         type="misc"
     />
+    <min_mta_version>1.5.4-9.11342</min_mta_version>
 
     <script src="config.lua"     type="server" cache="false"/>
     <script src="server.lua"     type="server" cache="false"/>
