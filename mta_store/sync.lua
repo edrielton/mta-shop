@@ -131,11 +131,27 @@ local function sendToken(player)
     end)
 end
 
+-- ── Registra jogador no site automaticamente ──────────────────────
+local function registerPlayer(player)
+    if not isElement(player) then return end
+    local serial = getPlayerSerial(player)
+    local acc = getPlayerAccount(player)
+    local accName = acc and not isGuestAccount(acc) and getAccountName(acc) or nil
+    local playerName = getPlayerName(player) or "jogador"
+
+    postToSite("/api/player/register-by-serial", {
+        serial = serial,
+        account = accName,
+        playerName = playerName,
+    }, nil)
+end
+
 -- ── Eventos ───────────────────────────────────────────────────────────
 addEventHandler("onPlayerLogin", root, function()
     local player = source
     setTimer(function()
         if isElement(player) then
+            registerPlayer(player)
             fetchAndSync(player)
             sendToken(player)
         end

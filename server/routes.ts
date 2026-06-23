@@ -1770,6 +1770,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── REGISTRO AUTOMÁTICO POR SERIAL (MTA chama no login) ───────
+  app.post("/api/player/register-by-serial", async (req, res) => {
+    try {
+      const apiToken = req.headers["x-api-token"];
+      const settings = await storage.getMtaSettings();
+      if (!settings || apiToken !== settings.apiToken) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+      }
+
+      const { serial, account, playerName } = req.body;
+      if (!serial) {
+        return res.status(400).json({ success: false, error: "serial obrigatório" });
+      }
+
+      let user = await storage.getUserByMtaSerial(serial);
+
+      if (!user) {
+        const serialSuffix = serial.replace(/[^a-zA-Z0-9]/g, "").slice(-8).toLowerCase();
+        const baseName = playerName
+          ? playerName.replace(/\s+/g, "").toLowerCase().slice(0, 12)
+          : "jogador";
+        const username = `${baseName}_${serialSuffix}`;
+        const securePassword = crypto.randomBytes(32).toString("hex");
+
+        user = await storage.createUser({
+          username,
+          email: `${serialSuffix}@mtastore.local`,
+          password: securePassword,
+          mtaSerial: serial,
+          mtaAccount: account || undefined,
+        });
+
+        await storage.createLog({
+          type: "auth",
+          level: "info",
+          message: `Conta criada automaticamente via serial: ${username}`,
+        });
+      } else if (account && !user.mtaAccount) {
+        await storage.updateUser(user.id, { mtaAccount: account });
+      }
+
+      res.json({ success: true, userId: user.id });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Internal error" });
+    }
+  });
+
   // ── POLLING: MTA busca ativações pendentes ────────────────────
   app.get("/api/player/pending-activations", async (req, res) => {
     try {
