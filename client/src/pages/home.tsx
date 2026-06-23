@@ -69,7 +69,7 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative min-h-[80vh] flex items-center justify-center overflow-x-hidden">
+      <section className="relative min-h-[80vh] flex items-center justify-center">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-background to-background" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
@@ -77,25 +77,6 @@ export default function Home() {
         {/* Animated glow orbs */}
         <GlowPulse className="absolute top-20 left-[15%] w-72 h-72 rounded-full bg-primary/5 blur-[100px]" />
         <GlowPulse className="absolute bottom-20 right-[10%] w-96 h-96 rounded-full bg-primary/5 blur-[120px]" />
-
-        {/* Dragon */}
-        <div className="absolute right-[2%] top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-90 pointer-events-none select-none dragon-float hidden lg:block z-[1]">
-          <img
-            src="/images/dragon.svg"
-            alt=""
-            className="w-full h-full drop-shadow-[0_0_100px_rgba(99,102,241,0.6)] drop-shadow-[0_0_50px_rgba(168,85,247,0.4)] drop-shadow-[0_0_20px_rgba(99,102,241,0.3)]"
-          />
-          {/* Dragon glow aura */}
-          <div className="absolute inset-[-25%] rounded-full bg-primary/20 blur-[120px] dragon-breath" />
-        </div>
-
-        {/* Floating particles around dragon */}
-        <div className="absolute right-[15%] top-[15%] w-2.5 h-2.5 rounded-full bg-purple-400 particle-float hidden lg:block z-[2]" style={{ animationDelay: "0s", boxShadow: "0 0 10px rgba(168,85,247,0.6)" }} />
-        <div className="absolute right-[25%] top-[30%] w-2 h-2 rounded-full bg-primary particle-float hidden lg:block z-[2]" style={{ animationDelay: "0.5s", boxShadow: "0 0 8px rgba(99,102,241,0.6)" }} />
-        <div className="absolute right-[10%] top-[55%] w-3 h-3 rounded-full bg-indigo-400 particle-float hidden lg:block z-[2]" style={{ animationDelay: "1s", boxShadow: "0 0 12px rgba(129,140,248,0.5)" }} />
-        <div className="absolute right-[20%] top-[70%] w-1.5 h-1.5 rounded-full bg-violet-500 particle-float hidden lg:block z-[2]" style={{ animationDelay: "1.5s", boxShadow: "0 0 8px rgba(168,85,247,0.6)" }} />
-        <div className="absolute right-[30%] top-[40%] w-2 h-2 rounded-full bg-primary/80 particle-float hidden lg:block z-[2]" style={{ animationDelay: "2s", boxShadow: "0 0 10px rgba(99,102,241,0.5)" }} />
-        <div className="absolute right-[8%] top-[45%] w-2 h-2 rounded-full bg-purple-500 particle-float hidden lg:block z-[2]" style={{ animationDelay: "2.5s", boxShadow: "0 0 12px rgba(168,85,247,0.5)" }} />
 
         {/* Grid pattern overlay */}
         <div

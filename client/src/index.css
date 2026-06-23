@@ -226,66 +226,6 @@
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
   }
-
-  /* Dragon floating animation */
-  .dragon-float {
-    animation: dragonFloat 6s ease-in-out infinite;
-  }
-
-  @keyframes dragonFloat {
-    0%, 100% {
-      transform: translateY(-50%) translateX(0) rotate(0deg);
-    }
-    25% {
-      transform: translateY(calc(-50% - 15px)) translateX(5px) rotate(1deg);
-    }
-    50% {
-      transform: translateY(calc(-50% - 8px)) translateX(-3px) rotate(-0.5deg);
-    }
-    75% {
-      transform: translateY(calc(-50% - 20px)) translateX(8px) rotate(0.5deg);
-    }
-  }
-
-  /* Floating particles */
-  .particle-float {
-    animation: particleFloat 4s ease-in-out infinite;
-  }
-
-  @keyframes particleFloat {
-    0%, 100% {
-      transform: translateY(0) translateX(0);
-      opacity: 0.4;
-    }
-    25% {
-      transform: translateY(-20px) translateX(8px);
-      opacity: 0.8;
-    }
-    50% {
-      transform: translateY(-10px) translateX(-5px);
-      opacity: 0.6;
-    }
-    75% {
-      transform: translateY(-25px) translateX(12px);
-      opacity: 0.9;
-    }
-  }
-
-  /* Dragon breathing glow */
-  .dragon-breath {
-    animation: dragonBreath 3s ease-in-out infinite;
-  }
-
-  @keyframes dragonBreath {
-    0%, 100% {
-      opacity: 0.3;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.6;
-      transform: scale(1.05);
-    }
-  }
 }
 
 /**
