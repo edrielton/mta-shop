@@ -1309,31 +1309,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Health check MTA - desabilitado (hosting não suporta HTTP pages)
   app.get("/api/admin/mta-health", requireAdmin, async (_req, res) => {
-    try {
-      const settings = await storage.getMtaSettings();
-      if (!settings || !settings.isActive) {
-        return res.json({ status: "offline", reason: "not_configured", checkedAt: new Date().toISOString() });
-      }
-
-      let status: "online" | "offline" = "offline";
-      try {
-        const resp = await fetch(`${settings.serverUrl}:${settings.serverPort}/mta_store/health`, {
-          method: "GET",
-          headers: { "X-API-Token": settings.apiToken },
-          signal: AbortSignal.timeout(5000),
-        });
-        status = resp.ok ? "online" : "offline";
-      } catch { status = "offline"; }
-
-      res.json({ status, checkedAt: new Date().toISOString() });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to check MTA health" });
-    }
+    res.json({ status: "unknown", reason: "http_pages_disabled", message: "Verificação via HTTP desabilitada. Use /storesync no MTA.", checkedAt: new Date().toISOString() });
   });
 
-
-
+  // Teste de conexão MTA - desabilitado (hosting não suporta HTTP pages)
+  app.get("/api/admin/mta-test", requireAdmin, async (_req, res) => {
+    res.json({ success: false, message: "Teste via HTTP desabilitado. O MTA comunica via /storesync (fetchRemote).", hint: "Execute /storesync no console do MTA para testar." });
+  });
 
 
   // Alias usado pelo painel admin ("Testar conexão")
@@ -1538,66 +1522,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── SCAN DE RESOURCES DO SERVIDOR MTA ──────────────────────────────
-  // Escaneia todos os resources instalados e retorna para o painel admin
-  // Permite autenticação via token (header x-api-token) ou sessão (cookie)
-  app.get("/api/admin/mta-scan", async (req, res) => {
-    try {
-      const apiToken = req.headers["x-api-token"] as string | undefined;
-
-      // valida token se enviado; caso não, valida sessão
-      if (!req.session?.userId) {
-        if (!apiToken) return res.status(401).json({ message: "Authentication required" });
-
-        const settings = await storage.getMtaSettings();
-        if (!settings || apiToken !== settings.apiToken) {
-          return res.status(401).json({ message: "Authentication required" });
-        }
-      } else {
-        // sessão presente: exige admin
-        const user = await storage.getUser(req.session.userId);
-        if (!user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
-        (req as any).adminUser = user;
-      }
-
-      const settings = await storage.getMtaSettings();
-      if (!settings || !settings.isActive) {
-        return res.status(400).json({ message: "Servidor MTA não configurado ou inativo." });
-      }
-
-
-      const scanUrl = `${settings.serverUrl}:${settings.serverPort}/mta_store/scan`;
-      const response = await fetch(scanUrl, {
-        method: "GET",
-        headers: { "X-API-Token": settings.apiToken },
-        signal: AbortSignal.timeout(15000), // scan pode demorar um pouco
-      });
-
-      if (!response.ok) {
-        return res.status(502).json({ message: "MTA retornou erro ao escanear resources." });
-      }
-
-      const data = await response.json();
-
-      await storage.createLog({
-        type: "admin",
-        level: "info",
-        message: `Scan de resources executado: ${data.total} encontrados, ${data.running} rodando`,
-      });
-
-      res.json(data);
-    } catch (error) {
-      console.error("[mta-scan] Erro:", error);
-      const msg = error instanceof Error ? error.message : "Erro desconhecido";
-
-      if (msg.includes("ECONNREFUSED") || msg.includes("connect")) {
-        return res.status(503).json({ message: "Servidor MTA offline ou inacessível. Verifique as configurações." });
-      }
-      if (msg.includes("ETIMEDOUT") || msg.includes("timeout") || msg.includes("AbortError")) {
-        return res.status(504).json({ message: "Servidor MTA não respondeu a tempo (15s). Verifique se está rodando." });
-      }
-
-      res.status(500).json({ message: `Falha ao escanear: ${msg}` });
-    }
+  // DESABILITADO: hosting não suporta HTTP pages do MTA
+  // Use o Scanner App para enviar dados ao site
+  app.get("/api/admin/mta-scan", async (_req, res) => {
+    res.json({
+      success: false,
+      message: "Scan direto desabilitado. Use o Scanner App para enviar mods.",
+      hint: "Abra MTA-Store-Scanner.html e envie os dados.",
+    });
   });
 
   // Sincroniza um resource com a loja (cria produto baseado no resource)
