@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, Crown, Car, Coins, Package, Filter, ArrowUpDown, X, Star, ShoppingCart, Gift,
 } from "lucide-react";
+import { Animated, StaggerContainer, StaggerItem } from "@/components/animated";
 import type { Product } from "@shared/schema";
 
 function formatPrice(price: string | number, currency = "BRL") {
@@ -287,26 +288,30 @@ export default function ProductsPage() {
           {/* Conteúdo */}
           <div className="flex-1 space-y-8">
 
-            {/* ── Seção Itens Gratuitos (sempre visível se existirem e não estiver filtrando por outra categoria) ── */}
+            {/* ── Seção Itens Gratuitos ── */}
             {!isLoading && freeProducts.length > 0 && (category === "all" || category === "free") && !search && (
-              <section>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-8 w-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <Gift className="h-4 w-4 text-emerald-500" />
+              <Animated variant="fadeUp">
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                      <Gift className="h-4 w-4 text-emerald-500" />
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-lg">🎁 Itens Gratuitos</h2>
+                      <p className="text-xs text-muted-foreground">Resgate sem pagar — ativação automática no servidor</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="font-bold text-lg">🎁 Itens Gratuitos</h2>
-                    <p className="text-xs text-muted-foreground">Resgate sem pagar — ativação automática no servidor</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {freeProducts.map((p) => <ProductCard key={p.id} product={p} />)}
-                </div>
-                {category === "all" && <div className="border-t mt-8" />}
-              </section>
+                  <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" stagger={0.08}>
+                    {freeProducts.map((p) => (
+                      <StaggerItem key={p.id}><ProductCard product={p} /></StaggerItem>
+                    ))}
+                  </StaggerContainer>
+                  {category === "all" && <div className="border-t mt-8" />}
+                </section>
+              </Animated>
             )}
 
-            {/* ── Produtos pagos / resultados de busca / filtro ── */}
+            {/* ── Produtos pagos ── */}
             {category !== "free" && (
               <section>
                 {category === "all" && freeProducts.length > 0 && !search && (
@@ -317,9 +322,11 @@ export default function ProductsPage() {
                     {Array.from({ length: 9 }).map((_, i) => <ProductSkeleton key={i} />)}
                   </div>
                 ) : filteredProducts.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {filteredProducts.map((p) => <ProductCard key={p.id} product={p} />)}
-                  </div>
+                  <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" stagger={0.06}>
+                    {filteredProducts.map((p) => (
+                      <StaggerItem key={p.id}><ProductCard product={p} /></StaggerItem>
+                    ))}
+                  </StaggerContainer>
                 ) : (
                   <div className="text-center py-20">
                     <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-muted mb-4">

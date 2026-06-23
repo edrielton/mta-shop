@@ -2,14 +2,14 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Zap, 
-  Shield, 
-  Clock, 
-  CreditCard, 
-  Car, 
-  Coins, 
-  Crown, 
+import {
+  Zap,
+  Shield,
+  Clock,
+  CreditCard,
+  Car,
+  Coins,
+  Crown,
   Package,
   CheckCircle,
   ArrowRight,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Animated, StaggerContainer, StaggerItem, GlowPulse } from "@/components/animated";
 import type { Product } from "@shared/schema";
 
 function formatPrice(price: string | number, currency = "BRL") {
@@ -68,140 +69,156 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative min-h-[70vh] flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-background to-background" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
-        
+
+        {/* Animated glow orbs */}
+        <GlowPulse className="absolute top-20 left-[15%] w-72 h-72 rounded-full bg-primary/5 blur-[100px]" />
+        <GlowPulse className="absolute bottom-20 right-[10%] w-96 h-96 rounded-full bg-primary/5 blur-[120px]" />
+
         {/* Grid pattern overlay */}
-        <div 
-          className="absolute inset-0 opacity-5"
+        <div
+          className="absolute inset-0 opacity-[0.03]"
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
           }}
         />
 
         <div className="container relative z-10 px-4 py-16 text-center">
-          <Badge 
-            variant="secondary" 
-            className="mb-6 px-4 py-1.5 text-sm font-medium"
-            data-testid="badge-instant-delivery"
-          >
-            <Zap className="h-3.5 w-3.5 mr-1.5" />
-            Ativação Instantânea
-          </Badge>
-          
-          <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-            Sua Loja de Itens
-            <span className="block text-primary">MTA Server</span>
-          </h1>
-          
-          <p className="text-muted-foreground text-lg sm:text-xl max-w-2xl mx-auto mb-8">
-            Compre VIP, veículos, moedas e itens exclusivos. 
-            Pagamento seguro e ativação automática no servidor.
-          </p>
+          <Animated variant="scaleIn" delay={0.1}>
+            <Badge
+              variant="secondary"
+              className="mb-6 px-4 py-1.5 text-sm font-medium"
+              data-testid="badge-instant-delivery"
+            >
+              <Zap className="h-3.5 w-3.5 mr-1.5" />
+              Ativação Instantânea
+            </Badge>
+          </Animated>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link href="/products">
-              <Button size="lg" className="gap-2 w-full sm:w-auto" data-testid="button-browse-products">
-                Ver Produtos
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href="/auth">
-              <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto" data-testid="button-login">
-                Fazer Login
-              </Button>
-            </Link>
-          </div>
+          <Animated variant="fadeUp" delay={0.2}>
+            <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
+              Sua Loja de Itens
+              <span className="block text-primary">MTA Server</span>
+            </h1>
+          </Animated>
 
-          {/* Trust indicators */}
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
-              <span>Entrega Instantânea</span>
+          <Animated variant="fadeUp" delay={0.35}>
+            <p className="text-muted-foreground text-lg sm:text-xl max-w-2xl mx-auto mb-8">
+              Compre VIP, veículos, moedas e itens exclusivos.
+              Pagamento seguro e ativação automática no servidor.
+            </p>
+          </Animated>
+
+          <Animated variant="fadeUp" delay={0.5}>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+              <Link href="/products">
+                <Button size="lg" className="gap-2 w-full sm:w-auto" data-testid="button-browse-products">
+                  Ver Produtos
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link href="/auth">
+                <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto" data-testid="button-login">
+                  Fazer Login
+                </Button>
+              </Link>
             </div>
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              <span>Pagamento Seguro</span>
+          </Animated>
+
+          <Animated variant="fadeUp" delay={0.65}>
+            <div className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
+              {[
+                { icon: <Zap className="h-4 w-4 text-primary" />, text: "Entrega Instantânea" },
+                { icon: <Shield className="h-4 w-4 text-primary" />, text: "Pagamento Seguro" },
+                { icon: <Clock className="h-4 w-4 text-primary" />, text: "Suporte 24/7" },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  {item.icon}
+                  <span>{item.text}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
-              <span>Suporte 24/7</span>
-            </div>
-          </div>
+          </Animated>
         </div>
       </section>
 
       {/* Featured Products */}
       <section className="py-20 px-4">
         <div className="container max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
-              Produtos em Destaque
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Escolha entre nossa seleção de itens populares
-            </p>
-          </div>
+          <Animated variant="fadeUp">
+            <div className="text-center mb-12">
+              <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
+                Produtos em Destaque
+              </h2>
+              <p className="text-muted-foreground max-w-xl mx-auto">
+                Escolha entre nossa seleção de itens populares
+              </p>
+            </div>
+          </Animated>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" stagger={0.1}>
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i} className="overflow-hidden">
-                  <Skeleton className="h-48 w-full" />
-                  <CardContent className="p-6">
-                    <Skeleton className="h-6 w-3/4 mb-2" />
-                    <Skeleton className="h-4 w-full mb-4" />
-                    <Skeleton className="h-10 w-full" />
-                  </CardContent>
-                </Card>
+                <StaggerItem key={i}>
+                  <Card className="overflow-hidden">
+                    <Skeleton className="h-48 w-full" />
+                    <CardContent className="p-6">
+                      <Skeleton className="h-6 w-3/4 mb-2" />
+                      <Skeleton className="h-4 w-full mb-4" />
+                      <Skeleton className="h-10 w-full" />
+                    </CardContent>
+                  </Card>
+                </StaggerItem>
               ))
             ) : products && products.length > 0 ? (
               products.map((product) => (
-                <Card 
-                  key={product.id} 
-                  className="group overflow-visible hover-elevate"
-                  data-testid={`card-product-${product.id}`}
-                >
-                  <div className="relative h-48 bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-                    <div className={`p-6 rounded-full ${getCategoryColor(product.category)}`}>
-                      {getCategoryIcon(product.category)}
+                <StaggerItem key={product.id}>
+                  <Card
+                    className="group overflow-visible hover-elevate"
+                    data-testid={`card-product-${product.id}`}
+                  >
+                    <div className="relative h-48 bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+                      <div className={`p-6 rounded-full ${getCategoryColor(product.category)}`}>
+                        {getCategoryIcon(product.category)}
+                      </div>
+                      {product.category === "vip" && (
+                        <Badge
+                          className="absolute top-4 right-4 bg-amber-500 text-white"
+                          data-testid={`badge-hot-${product.id}`}
+                        >
+                          HOT
+                        </Badge>
+                      )}
                     </div>
-                    {product.category === "vip" && (
-                      <Badge 
-                        className="absolute top-4 right-4 bg-amber-500 text-white"
-                        data-testid={`badge-hot-${product.id}`}
-                      >
-                        HOT
-                      </Badge>
-                    )}
-                  </div>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-semibold text-lg">{product.name}</h3>
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-xs shrink-0 ${getCategoryColor(product.category)}`}
-                      >
-                        {product.category.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
-                      {product.description || "Sem descrição"}
-                    </p>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-display font-bold text-xl">
-                        {formatPrice(product.price, product.currency || "BRL")}
-                      </span>
-                      <Link href={`/products/${product.id}`}>
-                        <Button size="sm" data-testid={`button-buy-${product.id}`}>
-                          Comprar
-                        </Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="font-semibold text-lg">{product.name}</h3>
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs shrink-0 ${getCategoryColor(product.category)}`}
+                        >
+                          {product.category.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
+                        {product.description || "Sem descrição"}
+                      </p>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="font-display font-bold text-xl">
+                          {formatPrice(product.price, product.currency || "BRL")}
+                        </span>
+                        <Link href={`/products/${product.id}`}>
+                          <Button size="sm" data-testid={`button-buy-${product.id}`}>
+                            Comprar
+                          </Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </StaggerItem>
               ))
             ) : (
               <div className="col-span-full text-center py-12 text-muted-foreground">
@@ -209,32 +226,36 @@ export default function Home() {
                 <p>Nenhum produto disponível no momento</p>
               </div>
             )}
-          </div>
+          </StaggerContainer>
 
-          <div className="text-center mt-10">
-            <Link href="/products">
-              <Button variant="outline" size="lg" className="gap-2" data-testid="button-view-all">
-                Ver Todos os Produtos
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
+          <Animated variant="fadeUp" delay={0.2}>
+            <div className="text-center mt-10">
+              <Link href="/products">
+                <Button variant="outline" size="lg" className="gap-2" data-testid="button-view-all">
+                  Ver Todos os Produtos
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </Animated>
         </div>
       </section>
 
       {/* How It Works */}
       <section className="py-20 px-4 bg-muted/30">
         <div className="container max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
-              Como Funciona
-            </h2>
-            <p className="text-muted-foreground">
-              Processo simples e rápido em 3 passos
-            </p>
-          </div>
+          <Animated variant="fadeUp">
+            <div className="text-center mb-16">
+              <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
+                Como Funciona
+              </h2>
+              <p className="text-muted-foreground">
+                Processo simples e rápido em 3 passos
+              </p>
+            </div>
+          </Animated>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <StaggerContainer className="grid md:grid-cols-3 gap-8" stagger={0.15}>
             {[
               {
                 step: 1,
@@ -255,78 +276,84 @@ export default function Home() {
                 description: "Receba seu item instantaneamente no servidor",
               },
             ].map((item) => (
-              <div 
-                key={item.step} 
-                className="text-center relative"
-                data-testid={`step-${item.step}`}
-              >
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-6">
-                  {item.icon}
-                </div>
-                <div className="absolute top-8 left-[60%] w-[80%] h-px bg-border hidden md:block last:hidden" />
-                <Badge 
-                  variant="secondary" 
-                  className="absolute -top-2 left-1/2 -translate-x-1/2 text-xs"
+              <StaggerItem key={item.step}>
+                <div
+                  className="text-center relative"
+                  data-testid={`step-${item.step}`}
                 >
-                  Passo {item.step}
-                </Badge>
-                <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
-                <p className="text-muted-foreground text-sm">{item.description}</p>
-              </div>
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-6">
+                    {item.icon}
+                  </div>
+                  <div className="absolute top-8 left-[60%] w-[80%] h-px bg-border hidden md:block last:hidden" />
+                  <Badge
+                    variant="secondary"
+                    className="absolute -top-2 left-1/2 -translate-x-1/2 text-xs"
+                  >
+                    Passo {item.step}
+                  </Badge>
+                  <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
+                  <p className="text-muted-foreground text-sm">{item.description}</p>
+                </div>
+              </StaggerItem>
             ))}
-          </div>
+          </StaggerContainer>
         </div>
       </section>
 
       {/* Stats */}
       <section className="py-20 px-4">
         <div className="container max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-8" stagger={0.1}>
             {[
               { value: "5.000+", label: "Vendas Realizadas", icon: <TrendingUp className="h-5 w-5" /> },
               { value: "500+", label: "VIPs Ativos", icon: <Crown className="h-5 w-5" /> },
               { value: "< 1min", label: "Tempo de Ativação", icon: <Clock className="h-5 w-5" /> },
               { value: "99.9%", label: "Taxa de Sucesso", icon: <CheckCircle className="h-5 w-5" /> },
             ].map((stat, i) => (
-              <div key={i} className="text-center" data-testid={`stat-${i}`}>
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-4">
-                  {stat.icon}
+              <StaggerItem key={i}>
+                <div className="text-center" data-testid={`stat-${i}`}>
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-4">
+                    {stat.icon}
+                  </div>
+                  <div className="font-display text-3xl sm:text-4xl font-bold mb-1">
+                    {stat.value}
+                  </div>
+                  <div className="text-muted-foreground text-sm">
+                    {stat.label}
+                  </div>
                 </div>
-                <div className="font-display text-3xl sm:text-4xl font-bold mb-1">
-                  {stat.value}
-                </div>
-                <div className="text-muted-foreground text-sm">
-                  {stat.label}
-                </div>
-              </div>
+              </StaggerItem>
             ))}
-          </div>
+          </StaggerContainer>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="py-20 px-4 bg-primary/5">
-        <div className="container max-w-3xl mx-auto text-center">
-          <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
-            Pronto para Começar?
-          </h2>
-          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            Crie sua conta agora e tenha acesso a todos os produtos exclusivos do servidor
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/auth">
-              <Button size="lg" className="gap-2 w-full sm:w-auto" data-testid="button-cta-register">
-                <Users className="h-4 w-4" />
-                Criar Conta Grátis
-              </Button>
-            </Link>
-            <Link href="/products">
-              <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto" data-testid="button-cta-products">
-                Explorar Produtos
-              </Button>
-            </Link>
+      <section className="py-20 px-4 bg-primary/5 relative overflow-hidden">
+        <GlowPulse className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-primary/5 blur-[100px]" />
+        <Animated variant="scaleIn">
+          <div className="container max-w-3xl mx-auto text-center relative z-10">
+            <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
+              Pronto para Começar?
+            </h2>
+            <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+              Crie sua conta agora e tenha acesso a todos os produtos exclusivos do servidor
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/auth">
+                <Button size="lg" className="gap-2 w-full sm:w-auto" data-testid="button-cta-register">
+                  <Users className="h-4 w-4" />
+                  Criar Conta Grátis
+                </Button>
+              </Link>
+              <Link href="/products">
+                <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto" data-testid="button-cta-products">
+                  Explorar Produtos
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
+        </Animated>
       </section>
 
       {/* Footer */}

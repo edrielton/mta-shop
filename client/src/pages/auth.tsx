@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { Loader2, Gamepad2, Shield, Zap } from "lucide-react";
+import { Animated, StaggerContainer, StaggerItem } from "@/components/animated";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Usuário deve ter pelo menos 3 caracteres"),
@@ -38,7 +39,6 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // TODOS os hooks antes de qualquer return condicional
   const loginForm = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: { username: "", password: "" },
@@ -52,7 +52,6 @@ export default function AuthPage() {
     },
   });
 
-  // Redirect fora do render — useEffect evita violação de hooks
   useEffect(() => {
     if (!authLoading && user) {
       setLocation("/dashboard");
@@ -99,7 +98,6 @@ export default function AuthPage() {
     }
   };
 
-  // Loading inicial
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -108,7 +106,6 @@ export default function AuthPage() {
     );
   }
 
-  // Já logado — mostra spinner enquanto o useEffect redireciona
   if (user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -121,7 +118,7 @@ export default function AuthPage() {
     <div className="min-h-screen flex">
       {/* Formulário */}
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
+        <Animated variant="fadeUp" className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-4">
               <Gamepad2 className="h-8 w-8" />
@@ -253,20 +250,22 @@ export default function AuthPage() {
               </Card>
             </TabsContent>
           </Tabs>
-        </div>
+        </Animated>
       </div>
 
       {/* Lado direito — info */}
       <div className="hidden lg:flex flex-1 bg-primary/5 items-center justify-center p-8">
-        <div className="max-w-md">
-          <h2 className="font-display text-3xl font-bold mb-6">Por que criar uma conta?</h2>
-          <div className="space-y-6">
-            {[
-              { icon: <Zap className="h-5 w-5" />, title: "Ativação Instantânea", desc: "Seus itens são ativados automaticamente assim que o pagamento é confirmado" },
-              { icon: <Shield className="h-5 w-5" />, title: "Histórico Completo", desc: "Acompanhe todas suas compras e status de ativação em um só lugar" },
-              { icon: <Gamepad2 className="h-5 w-5" />, title: "Vinculação MTA", desc: "Vincule seu serial ou conta MTA para ativação automática no servidor" },
-            ].map((item) => (
-              <div key={item.title} className="flex gap-4">
+        <StaggerContainer className="max-w-md" stagger={0.15}>
+          <StaggerItem>
+            <h2 className="font-display text-3xl font-bold mb-6">Por que criar uma conta?</h2>
+          </StaggerItem>
+          {[
+            { icon: <Zap className="h-5 w-5" />, title: "Ativação Instantânea", desc: "Seus itens são ativados automaticamente assim que o pagamento é confirmado" },
+            { icon: <Shield className="h-5 w-5" />, title: "Histórico Completo", desc: "Acompanhe todas suas compras e status de ativação em um só lugar" },
+            { icon: <Gamepad2 className="h-5 w-5" />, title: "Vinculação MTA", desc: "Vincule seu serial ou conta MTA para ativação automática no servidor" },
+          ].map((item, i) => (
+            <StaggerItem key={i}>
+              <div className="flex gap-4 mb-6">
                 <div className="shrink-0 w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   {item.icon}
                 </div>
@@ -275,9 +274,9 @@ export default function AuthPage() {
                   <p className="text-muted-foreground text-sm">{item.desc}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
+            </StaggerItem>
+          ))}
+        </StaggerContainer>
       </div>
     </div>
   );

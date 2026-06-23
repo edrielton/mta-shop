@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Crown, Car, Coins, Package, Gamepad2, RefreshCw, ExternalLink,
-  Search, Filter, Zap, Star, ShoppingCart, ArrowRight,
+  Crown, Car, Coins, Package, Gamepad2, RefreshCw,
+  Search, Filter, Zap, Star, ShoppingCart,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
+import { Animated, StaggerContainer, StaggerItem, GlowPulse } from "@/components/animated";
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
@@ -157,22 +158,24 @@ export default function ResourcesPage() {
       <div className="container max-w-7xl mx-auto px-4 py-6">
         {/* Scan info banner */}
         {scanData?.success && scannedAt && (
-          <div className="mb-6 p-4 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Zap className="h-4 w-4 text-primary" />
+          <Animated variant="fadeUp">
+            <div className="mb-6 p-4 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Zap className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Último scan recebido</p>
+                  <p className="text-xs text-muted-foreground">
+                    {scannedAt} · {scanData.resources?.length || 0} resources · {stats.total} itens
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium">Último scan recebido</p>
-                <p className="text-xs text-muted-foreground">
-                  {scannedAt} · {scanData.resources?.length || 0} resources · {stats.total} itens
-                </p>
-              </div>
+              <Badge variant="secondary" className="text-xs">
+                via {scanData.trigger || "Scanner App"}
+              </Badge>
             </div>
-            <Badge variant="secondary" className="text-xs">
-              via {scanData.trigger || "Scanner App"}
-            </Badge>
-          </div>
+          </Animated>
         )}
 
         {isLoading ? (
@@ -189,23 +192,25 @@ export default function ResourcesPage() {
             ))}
           </div>
         ) : !scanData?.success || stats.total === 0 ? (
-          <div className="text-center py-24">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted mb-4">
-              <Gamepad2 className="h-8 w-8 text-muted-foreground" />
+          <Animated variant="scaleIn">
+            <div className="text-center py-24">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted mb-4">
+                <Gamepad2 className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h2 className="font-semibold text-xl mb-2">Nenhum scan recebido</h2>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                Execute o <strong>MTA Store Scanner</strong> (app desktop ou HTML) e clique em "Enviar pro Site" para visualizar os recursos aqui.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Link href="/products">
+                  <Button variant="outline" className="gap-2">
+                    <ShoppingCart className="h-4 w-4" />
+                    Ver Loja
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <h2 className="font-semibold text-xl mb-2">Nenhum scan recebido</h2>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Execute o <strong>MTA Store Scanner</strong> (app desktop ou HTML) e clique em "Enviar pro Site" para visualizar os recursos aqui.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <Link href="/products">
-                <Button variant="outline" className="gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  Ver Loja
-                </Button>
-              </Link>
-            </div>
-          </div>
+          </Animated>
         ) : (
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Sidebar */}
@@ -265,71 +270,72 @@ export default function ResourcesPage() {
                   <p className="text-muted-foreground">Nenhum item encontrado</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" stagger={0.06}>
                   {filteredItems.map((item, idx) => (
-                    <Card
-                      key={idx}
-                      className="group overflow-hidden border border-border/50 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 hover:-translate-y-0.5"
-                    >
-                      <div className={`relative h-36 bg-gradient-to-br ${getCategoryGradient(item.category)} flex items-center justify-center overflow-hidden`}>
-                        <div className="absolute inset-0 opacity-20">
-                          <div className="absolute -top-4 -right-4 w-28 h-28 rounded-full bg-white/10 blur-2xl" />
-                          <div className="absolute -bottom-4 -left-4 w-20 h-20 rounded-full bg-white/5 blur-xl" />
-                        </div>
-                        <div className={`relative z-10 p-4 rounded-2xl border ${getCategoryColor(item.category)} shadow-sm`}>
-                          {getCategoryIcon(item.category)}
-                        </div>
-
-                        <div className="absolute top-3 left-3 flex gap-1.5">
-                          {item.autoDetected && (
-                            <Badge className="bg-emerald-500 text-white border-0 text-[10px] font-semibold px-2 py-0.5">
-                              <Star className="h-2.5 w-2.5 mr-0.5 fill-current" /> Auto
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className={`absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getCategoryColor(item.category)}`}>
-                          {item.category.toUpperCase()}
-                        </div>
-                      </div>
-
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold text-sm mb-1 line-clamp-1 group-hover:text-primary transition-colors">
-                          {item.suggestedName}
-                        </h3>
-                        <p className="text-muted-foreground text-xs mb-3 line-clamp-2 leading-relaxed">
-                          {item.suggestedDesc || "Item detectado pelo scanner"}
-                        </p>
-
-                        <div className="flex items-center gap-2 mb-3">
-                          <code className="text-[11px] font-mono bg-muted px-2 py-0.5 rounded text-amber-500">
-                            /{item.mtaCommand}
-                          </code>
-                          {item.luaCommands?.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {item.luaCommands.length} cmds
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Preço Estimado</p>
-                            <span className="font-bold text-lg text-emerald-500">
-                              {item.estimatedPrice > 0 ? formatPrice(item.estimatedPrice) : "—"}
-                            </span>
+                    <StaggerItem key={idx}>
+                      <Card
+                        className="group overflow-hidden border border-border/50 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 hover:-translate-y-0.5"
+                      >
+                        <div className={`relative h-36 bg-gradient-to-br ${getCategoryGradient(item.category)} flex items-center justify-center overflow-hidden`}>
+                          <div className="absolute inset-0 opacity-20">
+                            <div className="absolute -top-4 -right-4 w-28 h-28 rounded-full bg-white/10 blur-2xl" />
+                            <div className="absolute -bottom-4 -left-4 w-20 h-20 rounded-full bg-white/5 blur-xl" />
                           </div>
-                          <Link href="/products">
-                            <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-                              <ShoppingCart className="h-3 w-3" />
-                              Ver Loja
-                            </Button>
-                          </Link>
+                          <div className={`relative z-10 p-4 rounded-2xl border ${getCategoryColor(item.category)} shadow-sm`}>
+                            {getCategoryIcon(item.category)}
+                          </div>
+
+                          <div className="absolute top-3 left-3 flex gap-1.5">
+                            {item.autoDetected && (
+                              <Badge className="bg-emerald-500 text-white border-0 text-[10px] font-semibold px-2 py-0.5">
+                                <Star className="h-2.5 w-2.5 mr-0.5 fill-current" /> Auto
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className={`absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getCategoryColor(item.category)}`}>
+                            {item.category.toUpperCase()}
+                          </div>
                         </div>
-                      </CardContent>
-                    </Card>
+
+                        <CardContent className="p-4">
+                          <h3 className="font-semibold text-sm mb-1 line-clamp-1 group-hover:text-primary transition-colors">
+                            {item.suggestedName}
+                          </h3>
+                          <p className="text-muted-foreground text-xs mb-3 line-clamp-2 leading-relaxed">
+                            {item.suggestedDesc || "Item detectado pelo scanner"}
+                          </p>
+
+                          <div className="flex items-center gap-2 mb-3">
+                            <code className="text-[11px] font-mono bg-muted px-2 py-0.5 rounded text-amber-500">
+                              /{item.mtaCommand}
+                            </code>
+                            {item.luaCommands?.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {item.luaCommands.length} cmds
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Preço Estimado</p>
+                              <span className="font-bold text-lg text-emerald-500">
+                                {item.estimatedPrice > 0 ? formatPrice(item.estimatedPrice) : "—"}
+                              </span>
+                            </div>
+                            <Link href="/products">
+                              <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                                <ShoppingCart className="h-3 w-3" />
+                                Ver Loja
+                              </Button>
+                            </Link>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </StaggerItem>
                   ))}
-                </div>
+                </StaggerContainer>
               )}
             </div>
           </div>

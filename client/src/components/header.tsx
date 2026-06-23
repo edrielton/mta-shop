@@ -39,12 +39,12 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300">
       <div className="container max-w-7xl mx-auto px-4">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
           <Link href="/">
-            <div className="flex items-center gap-2 hover-elevate rounded-md px-2 py-1" data-testid="link-home">
+            <div className="flex items-center gap-2 hover-elevate rounded-md px-2 py-1 transition-transform duration-200 hover:scale-105" data-testid="link-home">
               <Gamepad2 className="h-6 w-6 text-primary" />
               <span className="font-display font-bold text-xl hidden sm:inline">
                 MTA Store
@@ -56,9 +56,10 @@ export function Header() {
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => (
               <Link key={item.href} href={item.href}>
-                <Button 
+                <Button
                   variant={location === item.href ? "secondary" : "ghost"}
                   size="sm"
+                  className="transition-all duration-200"
                   data-testid={`nav-${item.label.toLowerCase()}`}
                 >
                   {item.label}
