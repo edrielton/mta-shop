@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import express, { type Request, type Response, type NextFunction } from "express";
+import compression from "compression";
 import { db } from "./db";
 
 
@@ -24,6 +25,9 @@ declare module "http" {
     rawBody: unknown;
   }
 }
+
+// Compressão gzip para reduzir tamanho do body
+app.use(compression());
 
 app.use(
   express.json({

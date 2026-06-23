@@ -789,17 +789,24 @@ async function sendToSite() {
   setStatus('Enviando dados...');
 
   try {
+    // Otimiza dados: resources só com campos essenciais
+    const slimResources = resources.map(r => ({
+      name: r.name, category: r.category, luaFileCount: r.luaFileCount,
+    }));
+    const payload = JSON.stringify({
+      source:    'scanner_app_v5',
+      trigger:   'MTA Scanner App (HTML v5.0)',
+      total:     resources.length,
+      detected,
+      resources: slimResources,
+      scannedAt: Math.floor(Date.now()/1000),
+    });
+    log('Tamanho dos dados: ' + (payload.length / 1024).toFixed(1) + ' KB', 'inf');
+
     const res = await fetch(url + '/api/mta/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Token': token },
-      body: JSON.stringify({
-        source:    'scanner_app_v5',
-        trigger:   'MTA Scanner App (HTML v5.0)',
-        total:     resources.length,
-        detected,
-        resources,
-        scannedAt: Math.floor(Date.now()/1000),
-      }),
+      body: payload,
     });
     const data = await res.json();
     if (!res.ok) {
