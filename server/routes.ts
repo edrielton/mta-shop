@@ -1378,7 +1378,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         luaFileCount: r.luaFileCount || 0,
       }));
 
-      // Salva no banco de dados
+      // Salva scan para historico
       await storage.saveScannerData({
         source: req.body.source || "scanner_app",
         trigger: trigger || "scanner_app",
@@ -1389,21 +1389,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         detected: normalizedDetected,
       });
 
+      // Auto-cria produtos a partir dos itens detectados
+      let created = 0;
+      let skipped = 0;
+
+      for (const item of normalizedDetected) {
+        const sku = `AUTO-${item.resourceName}-${item.mtaCommand}-${JSON.stringify(item.mtaParams || {}).slice(0, 20)}`.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 80);
+
+        const existing = await storage.getProductBySku(sku);
+        if (existing) { skipped++; continue; }
+
+        await storage.createProduct({
+          name:        item.suggestedName,
+          description: item.suggestedDesc,
+          sku,
+          price:       String(item.estimatedPrice || 0),
+          currency:    "BRL",
+          category:    item.category,
+          mtaCommand:  item.mtaCommand,
+          mtaParams:   item.mtaParams,
+          isActive:    false,
+        });
+        created++;
+      }
+
       await storage.createLog({
         type:    "admin",
         level:   "info",
-        message: `Scan recebido de "${trigger}": ${resources.length} mods, ${detected.length} itens detectados.`,
+        message: `Scan "${trigger}": ${created} produto(s) criado(s), ${skipped} ja existiam, ${detected.length} detectado(s).`,
       });
 
-      // Notifica admins online via WebSocket em tempo real
       broadcastAdmin("scan_received", {
         trigger,
         scannedAt: scannedAt || Math.floor(Date.now() / 1000),
         total: detected.length,
-        message: `Novo scan: ${detected.length} item(ns) detectado(s). Abra Resources MTA para revisar.`,
+        created,
+        message: `${created} produto(s) criado(s) automaticamente. Abra Produtos para revisar.`,
       });
 
-      res.json({ success: true, total: detected.length, created: 0, skipped: detected.length });
+      res.json({ success: true, total: detected.length, created, skipped });
     } catch (error) {
       console.error("Command sync error:", error);
       res.status(500).json({ success: false, error: "Internal error" });

@@ -1203,7 +1203,7 @@ function ResourcesTab() {
           {view === "products" && (
             <Card>
               <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground mb-4">Produtos criados a partir dos mods detectados. Ative/desative na aba <strong>Produtos</strong>.</p>
+                <p className="text-sm text-muted-foreground mb-4">Os itens detectados pelo scanner são criados automaticamente como produtos (inativos). Ative na aba <strong>Produtos</strong>.</p>
                 <Button onClick={() => qc.invalidateQueries({ queryKey: ["/api/admin/products"] })} variant="outline" className="gap-2">
                   <RefreshCw className="h-4 w-4" />Ver na aba Produtos
                 </Button>
@@ -1218,8 +1218,8 @@ function ResourcesTab() {
         <Card>
           <CardContent className="text-center py-16">
             <ScanLine className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="font-medium mb-1">Nenhum scan disponível</p>
-            <p className="text-sm text-muted-foreground mb-4">Abra o Scanner App e envie os mods, ou clique em "Escanear MTA" para buscar direto do servidor.</p>
+            <p className="font-medium mb-1">Nenhum scan realizado</p>
+            <p className="text-sm text-muted-foreground mb-4">Envie mods pelo Scanner App — os itens detectados vão direto para a aba <strong>Produtos</strong>.</p>
             <div className="flex gap-2 justify-center">
               <Button onClick={loadScanData} variant="outline" className="gap-2"><RefreshCw className="h-4 w-4" />Buscar Último Scan</Button>
               <Button onClick={runScan} className="gap-2"><ScanLine className="h-4 w-4" />Escanear MTA</Button>
