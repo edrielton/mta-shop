@@ -31,10 +31,10 @@ function LoadConfig {
     if (Test-Path $configFile) {
         try { return (Get-Content $configFile -Raw | ConvertFrom-Json) } catch {}
     }
-    return [PSCustomObject]@{ url="https://mtastore.site"; token=""; folder="" }
+    return [PSCustomObject]@{ url="https://mtastore.site"; token=""; folder=""; depth=10 }
 }
-function SaveConfig($url, $token, $folder) {
-    @{ url=$url; token=$token; folder=$folder } | ConvertTo-Json | Set-Content $configFile -Encoding UTF8
+function SaveConfig($url, $token, $folder, $depth) {
+    @{ url=$url; token=$token; folder=$folder; depth=$depth } | ConvertTo-Json | Set-Content $configFile -Encoding UTF8
 }
 
 function Coalesce($a, $b) { if ($null -ne $a -and $a -ne "") { return $a } return $b }
@@ -255,6 +255,11 @@ $bBrowse=New-Object System.Windows.Forms.Button
 $bBrowse.Text="Selecionar..."; $bBrowse.Location=New-Object System.Drawing.Point(536,77)
 $bBrowse.Size=New-Object System.Drawing.Size(115,28); $bBrowse.BackColor=$BG4; $bBrowse.ForeColor=$TEXT; $bBrowse.FlatStyle="Flat"; $bBrowse.FlatAppearance.BorderColor=$PRIMARY
 $pnlC.Controls.Add($bBrowse)
+
+$lbl4=NewLabel "Profundidade:" 16 116; $pnlC.Controls.Add($lbl4)
+$tDepth=NewInput 170 112 60; $tDepth.Text=([string](Coalesce $cfg.depth 10)); $pnlC.Controls.Add($tDepth)
+$lbl4b=NewLabel "subpastas (max 20)" 240 116; $pnlC.Controls.Add($lbl4b)
+$pnlC.Height = 146
 $form.Controls.Add($pnlC)
 
 $pnlB=New-Object System.Windows.Forms.Panel
@@ -346,16 +351,18 @@ $bScan.Add_Click({
     if (-not $global:FolderPath -or -not (Test-Path $global:FolderPath)) {
         [System.Windows.Forms.MessageBox]::Show("Selecione a pasta resources do MTA.","Atencao")|Out-Null; return
     }
-    SaveConfig $tUrl.Text $tTk.Text $global:FolderPath
+    $maxDepth = 10
+    try { $maxDepth = [Math]::Min([Math]::Max([int]$tDepth.Text, 1), 20) } catch {}
+    SaveConfig $tUrl.Text $tTk.Text $global:FolderPath $maxDepth
     $bScan.Enabled=$false; $bSend.Enabled=$false; $bExp.Enabled=$false
     $lv.Items.Clear(); $global:Resources=@(); $global:Detected=@(); $prog.Value=0
 
-    $dirs = Get-ChildItem -Path $global:FolderPath -Directory -Recurse -ErrorAction SilentlyContinue |
+    $dirs = Get-ChildItem -Path $global:FolderPath -Directory -Recurse -Depth ($maxDepth - 1) -ErrorAction SilentlyContinue |
         Where-Object { Test-Path (Join-Path $_.FullName "meta.xml") } | Sort-Object FullName
     $total = $dirs.Count
     if ($total -eq 0) { Log "Nenhum resource encontrado (nenhum meta.xml nas subpastas)." $RED; $bScan.Enabled=$true; return }
 
-    Log "Escaneando $total resources (recursivo)..." $PRIMARY
+    Log "Escaneando $total resources (recursivo, profundidade=$maxDepth)..." $PRIMARY
     $done = 0
 
     foreach ($dir in $dirs) {
@@ -441,7 +448,7 @@ $bSend.Add_Click({
         [System.Windows.Forms.MessageBox]::Show("Informe o token.","Atencao")|Out-Null; return
     }
 
-    SaveConfig $url $token $global:FolderPath
+    SaveConfig $url $token $global:FolderPath $maxDepth
     $bSend.Enabled=$false; Log "Enviando para $url..." $PRIMARY; Status "Enviando..."; [System.Windows.Forms.Application]::DoEvents()
     try {
         $body = @{ source="scanner_app_v4"; trigger="MTA Scanner App"; total=$global:Resources.Count; detected=$global:Detected; resources=$global:Resources; scannedAt=[int][Math]::Floor(([datetime]::UtcNow - [datetime]"1970-01-01T00:00:00Z").TotalSeconds) } | ConvertTo-Json -Depth 10

@@ -236,6 +236,11 @@
         <input id="inFolder" type="text" placeholder='Clique em "Selecionar Pasta"' readonly style="cursor:default" />
         <button class="btn btn-outline" onclick="selectFolder()">Selecionar Pasta</button>
       </div>
+      <div class="field" style="max-width:120px">
+        <label>Profundidade</label>
+        <input id="inDepth" type="number" min="1" max="20" value="10" />
+        <span class="hint">subpastas (1-20)</span>
+      </div>
     </div>
   </div>
 
@@ -337,10 +342,12 @@ function validateUrl(url) {
 function saveConfig() {
   localStorage.setItem('mta_scanner_url',   document.getElementById('inUrl').value);
   localStorage.setItem('mta_scanner_token', document.getElementById('inToken').value);
+  localStorage.setItem('mta_scanner_depth', document.getElementById('inDepth').value);
 }
 function loadConfig() {
   document.getElementById('inUrl').value   = localStorage.getItem('mta_scanner_url') || 'https://mtastore.site';
   document.getElementById('inToken').value = localStorage.getItem('mta_scanner_token') || '';
+  document.getElementById('inDepth').value = localStorage.getItem('mta_scanner_depth') || '10';
 }
 
 function updateButtons() {
@@ -552,9 +559,11 @@ async function startScan() {
   document.getElementById('statsRow').style.display = 'none';
 
   resources = []; detected = [];
-  log('Iniciando scan recursivo...', 'inf');
+  const depthVal = Math.min(Math.max(parseInt(document.getElementById('inDepth').value) || 10, 1), 20);
+  log(`Iniciando scan recursivo (profundidade=${depthVal})...`, 'inf');
 
   async function findResources(handle, depth = 0) {
+    const maxDepth = Math.min(Math.max(parseInt(document.getElementById('inDepth').value) || 10, 1), 20);
     const results = [];
     try {
       for await (const [, child] of handle.entries()) {
@@ -563,7 +572,7 @@ async function startScan() {
         try { await child.getFileHandle('meta.xml'); hasMeta = true; } catch {}
         if (hasMeta) {
           results.push(child);
-        } else if (depth < 5) {
+        } else if (depth < maxDepth) {
           results.push(...await findResources(child, depth + 1));
         }
       }
