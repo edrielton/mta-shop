@@ -380,12 +380,16 @@ function validateUrl(url) {
 }
 
 function saveConfig() {
-  localStorage.setItem('mta_scanner_url',   document.getElementById('inUrl').value);
+  const url = document.getElementById('inUrl').value.trim();
+  if (validateUrl(url)) {
+    localStorage.setItem('mta_scanner_url', url);
+  }
   localStorage.setItem('mta_scanner_token', document.getElementById('inToken').value);
   localStorage.setItem('mta_scanner_depth', document.getElementById('inDepth').value);
 }
 function loadConfig() {
-  document.getElementById('inUrl').value   = localStorage.getItem('mta_scanner_url') || 'https://mtastore.site';
+  const saved = localStorage.getItem('mta_scanner_url');
+  document.getElementById('inUrl').value = (saved && validateUrl(saved)) ? saved : 'https://mtastore.site';
   document.getElementById('inToken').value = localStorage.getItem('mta_scanner_token') || '';
   document.getElementById('inDepth').value = localStorage.getItem('mta_scanner_depth') || '10';
 }
