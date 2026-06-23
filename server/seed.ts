@@ -177,12 +177,12 @@ async function seed() {
   const existingSettings = await db.select().from(mtaSettings);
   if (existingSettings.length === 0) {
     await db.insert(mtaSettings).values({
-      serverUrl: "http://localhost",
-      serverPort: 22005,
-      apiToken: "change-this-token-in-production",
-      isActive: false,
+      serverUrl: "http://135.148.164.122",
+      serverPort: 27548,
+      apiToken: "988CBCDD5B9CE9C19EBBE1268A151294",
+      isActive: true,
     });
-    console.log("Created default MTA settings (inactive)");
+    console.log("Created default MTA settings");
   }
 
   console.log("Seeding complete!");
