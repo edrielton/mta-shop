@@ -22,7 +22,7 @@ import {
   Package, Users, History, FileText, Settings, Plus, Edit, Trash2,
   RefreshCw, DollarSign, AlertTriangle, CheckCircle, Clock, Loader2,
   Shield, Server, ScanLine, Plug, Layers, Ban, UserCheck,
-  QrCode, Eye, EyeOff, Wifi, WifiOff,
+  QrCode, Eye, EyeOff, Wifi, WifiOff, GripVertical,
 } from "lucide-react";
 import type { Product, Transaction, User, SystemLog } from "@shared/schema";
 
@@ -773,7 +773,7 @@ function SettingsTab({ isAdmin }: { isAdmin: boolean }) {
 interface DetectedItem {
   resourceName: string; suggestedName: string; suggestedDesc: string;
   category: string; mtaCommand: string; mtaParams: Record<string, any>;
-  autoDetected: boolean; luaCommands?: string[];
+  autoDetected: boolean; luaCommands?: string[]; estimatedPrice?: number;
 }
 interface MtaResource {
   name: string; state: string; description: string; classified: string | null;
@@ -784,13 +784,15 @@ interface ScanResult {
   scannedAt: number; trigger?: string; resources: MtaResource[]; detected: DetectedItem[];
 }
 
-const ESTIMATED_PRICES: Record<string, number> = {
+const FALLBACK_PRICES: Record<string, number> = {
   vip: 29.90, vehicle: 19.90, coins: 9.90, item: 14.90, weapon: 14.90,
 };
 
 const CAT_ICONS: Record<string, string> = { vip: "👑", vehicle: "🚗", coins: "💰", item: "📦", weapon: "🔫", house: "🏠", job: "💼" };
 const CAT_COLORS: Record<string, string> = { vip: "text-amber-500 bg-amber-500/10 border-amber-500/20", vehicle: "text-blue-500 bg-blue-500/10 border-blue-500/20", coins: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20", weapon: "text-red-500 bg-red-500/10 border-red-500/20", house: "text-orange-500 bg-orange-500/10 border-orange-500/20", job: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20" };
 const CAT_GRADIENTS: Record<string, string> = { vip: "from-amber-500/20 to-amber-600/5", vehicle: "from-blue-500/20 to-blue-600/5", coins: "from-emerald-500/20 to-emerald-600/5", weapon: "from-red-500/20 to-red-600/5", house: "from-orange-500/20 to-orange-600/5", job: "from-cyan-500/20 to-cyan-600/5" };
+const ALL_CATEGORIES = Object.keys(CAT_ICONS);
+const ITEMS_PER_PAGE = 12;
 
 function ResourcesTab() {
   const { toast } = useToast();
@@ -798,23 +800,30 @@ function ResourcesTab() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState<string>("all");
   const [view, setView] = useState<"detected" | "all" | "products">("detected");
   const [items, setItems] = useState<(DetectedItem & { editName: string; editPrice: string; editDesc: string })[]>([]);
   const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [page, setPage] = useState(0);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
 
-  // Carrega dados do último scan do scanner app (auto-load)
+  function mapItems(detected: DetectedItem[]) {
+    return detected.map((i) => ({
+      ...i,
+      editName: i.suggestedName,
+      editDesc: i.suggestedDesc || "",
+      editPrice: String(i.estimatedPrice || FALLBACK_PRICES[i.category] || 9.90),
+    }));
+  }
+
   async function loadScanData() {
     try {
       const res = await fetch("/api/admin/mta-scan-data", { credentials: "include" });
       const data = await res.json();
       if (data.success && data.detected && data.detected.length > 0) {
         setScan(data);
-        setItems(data.detected.map((i: DetectedItem) => ({
-          ...i,
-          editName: i.suggestedName,
-          editDesc: i.suggestedDesc || "",
-          editPrice: String(ESTIMATED_PRICES[i.category] || 9.90),
-        })));
+        setItems(mapItems(data.detected));
+        setPage(0);
       }
     } catch {}
   }
@@ -827,12 +836,8 @@ function ResourcesTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Erro ao escanear");
       setScan(data);
-      setItems((data.detected || []).map((i: DetectedItem) => ({
-        ...i,
-        editName: i.suggestedName,
-        editDesc: i.suggestedDesc || "",
-        editPrice: String(ESTIMATED_PRICES[i.category] || 9.90),
-      })));
+      setItems(mapItems(data.detected || []));
+      setPage(0);
       toast({ title: "Scan concluído", description: `${data.detectedItems || 0} item(ns) detectado(s).` });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
@@ -886,11 +891,30 @@ function ResourcesTab() {
     setItems(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
   }
 
-  const filteredDetected = items.filter(i =>
-    i.suggestedName.toLowerCase().includes(search.toLowerCase()) ||
-    i.resourceName.toLowerCase().includes(search.toLowerCase()) ||
-    i.mtaCommand.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredDetected = items.filter(i => {
+    const matchSearch = !search ||
+      i.suggestedName.toLowerCase().includes(search.toLowerCase()) ||
+      i.resourceName.toLowerCase().includes(search.toLowerCase()) ||
+      i.mtaCommand.toLowerCase().includes(search.toLowerCase());
+    const matchCat = catFilter === "all" || i.category === catFilter;
+    return matchSearch && matchCat;
+  });
+
+  const totalPages = Math.ceil(filteredDetected.length / ITEMS_PER_PAGE);
+  const pagedDetected = filteredDetected.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+
+  function handleDragStart(idx: number) { setDragIdx(idx); }
+  function handleDragOver(e: React.DragEvent) { e.preventDefault(); }
+  function handleDrop(targetIdx: number) {
+    if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
+    setItems(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIdx, 1);
+      next.splice(targetIdx, 0, moved);
+      return next;
+    });
+    setDragIdx(null);
+  }
 
   const filteredResources = (scan?.resources || []).filter(r =>
     r.name.toLowerCase().includes(search.toLowerCase())
@@ -995,29 +1019,56 @@ function ResourcesTab() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm text-muted-foreground">
-                        {items.length} mod(s) detectado(s) — clique em um card para editar nome/preço e criar como produto.
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm text-muted-foreground">
+                          {filteredDetected.length} de {items.length} mod(s)
+                        </p>
+                        <div className="flex gap-1 flex-wrap">
+                          <button onClick={() => { setCatFilter("all"); setPage(0); }}
+                            className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${catFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground border-border hover:border-primary/50"}`}>
+                            Todos
+                          </button>
+                          {ALL_CATEGORIES.map(c => {
+                            const count = items.filter(i => i.category === c).length;
+                            if (count === 0) return null;
+                            return (
+                              <button key={c} onClick={() => { setCatFilter(c === catFilter ? "all" : c); setPage(0); }}
+                                className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${catFilter === c ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground border-border hover:border-primary/50"}`}>
+                                {CAT_ICONS[c]} {c.toUpperCase()} ({count})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <Button size="sm" variant="outline" onClick={createAll} className="gap-2">
-                        <CheckCircle className="h-3.5 w-3.5" />Criar Todos ({items.length})
+                        <CheckCircle className="h-3.5 w-3.5" />Criar Todos ({filteredDetected.filter(i => parseFloat(i.editPrice) > 0).length})
                       </Button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filteredDetected.map((item, idx) => {
+                      {pagedDetected.map((item) => {
                         const realIdx = items.indexOf(item);
                         const isEditing = editIdx === realIdx;
                         const cat = item.category || "item";
+                        const priceNum = parseFloat(item.editPrice);
+                        const hasPriceError = item.editPrice !== "" && (isNaN(priceNum) || priceNum <= 0);
                         return (
                           <div key={realIdx}
+                            draggable
+                            onDragStart={() => handleDragStart(realIdx)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDrop(realIdx)}
                             onClick={() => setEditIdx(isEditing ? null : realIdx)}
                             className={`border rounded-xl p-4 space-y-3 cursor-pointer transition-all duration-200
-                              ${isEditing ? "border-primary/50 shadow-md shadow-primary/5 bg-primary/[0.02]" : "border-border/50 hover:border-primary/30 hover:shadow-sm"}`}>
+                              ${isEditing ? "border-primary/50 shadow-md shadow-primary/5 bg-primary/[0.02]" : "border-border/50 hover:border-primary/30 hover:shadow-sm"}
+                              ${hasPriceError ? "ring-2 ring-red-500/50 border-red-500/50" : ""}
+                              ${dragIdx === realIdx ? "opacity-50 scale-95" : ""}`}>
 
                             {/* Header */}
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex gap-2 items-center flex-wrap">
+                                <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 cursor-grab" />
                                 <span className="text-lg">{CAT_ICONS[cat] || "📦"}</span>
                                 <Badge variant="outline" className={`text-xs border ${CAT_COLORS[cat] || "text-purple-500 bg-purple-500/10 border-purple-500/20"}`}>{cat.toUpperCase()}</Badge>
                               </div>
@@ -1052,7 +1103,10 @@ function ResourcesTab() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Estimado</p>
-                                <span className="font-bold text-emerald-500">{formatCurrency(ESTIMATED_PRICES[cat] || 9.90)}</span>
+                                <span className={`font-bold ${hasPriceError ? "text-red-500" : "text-emerald-500"}`}>
+                                  {item.editPrice && !hasPriceError ? formatCurrency(priceNum) : formatCurrency(item.estimatedPrice || FALLBACK_PRICES[cat] || 9.90)}
+                                </span>
+                                {hasPriceError && <p className="text-[10px] text-red-500 mt-0.5">Defina um preço válido</p>}
                               </div>
                               {item.mtaParams && Object.keys(item.mtaParams).length > 0 && (
                                 <div className="text-right">
@@ -1072,7 +1126,9 @@ function ResourcesTab() {
                                   </div>
                                   <div className="space-y-1">
                                     <label className="text-[10px] text-muted-foreground uppercase">Preço (R$)</label>
-                                    <Input type="number" min="0" step="0.01" value={item.editPrice} onChange={e => updateItemField(realIdx, "editPrice", e.target.value)} className="h-8 text-xs font-bold" />
+                                    <Input type="number" min="0" step="0.01" value={item.editPrice}
+                                      onChange={e => updateItemField(realIdx, "editPrice", e.target.value)}
+                                      className={`h-8 text-xs font-bold ${hasPriceError ? "border-red-500 focus-visible:ring-red-500" : ""}`} />
                                   </div>
                                 </div>
                                 <div className="space-y-1">
@@ -1098,6 +1154,17 @@ function ResourcesTab() {
                         );
                       })}
                     </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-2 pt-2">
+                        <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Anterior</Button>
+                        <span className="text-xs text-muted-foreground">
+                          {page + 1} / {totalPages}
+                        </span>
+                        <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Próxima</Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
