@@ -1327,6 +1327,7 @@ export default function AdminPage() {
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-1.5" />Usuários</TabsTrigger>
             <TabsTrigger value="logs"><FileText className="h-4 w-4 mr-1.5" />Logs</TabsTrigger>
             <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-1.5" />Configurações</TabsTrigger>
+            <TabsTrigger value="resources"><ScanLine className="h-4 w-4 mr-1.5" />Resources MTA</TabsTrigger>
           </TabsList>
 
           <div className="mt-6">
@@ -1335,6 +1336,7 @@ export default function AdminPage() {
             <TabsContent value="users">     <UsersTab   isAdmin={isAdmin} /></TabsContent>
             <TabsContent value="logs">      <LogsTab    isAdmin={isAdmin} /></TabsContent>
             <TabsContent value="settings">  <SettingsTab isAdmin={isAdmin} /></TabsContent>
+            <TabsContent value="resources"> <ResourcesTab /></TabsContent>
           </div>
         </Tabs>
       </div>
