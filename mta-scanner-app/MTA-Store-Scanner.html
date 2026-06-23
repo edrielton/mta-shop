@@ -552,14 +552,36 @@ async function startScan() {
   document.getElementById('statsRow').style.display = 'none';
 
   resources = []; detected = [];
-  log('Iniciando scan...', 'inf');
+  log('Iniciando scan recursivo...', 'inf');
 
-  const entries = [];
-  for await (const [, handle] of dirHandle.entries()) {
-    if (handle.kind === 'directory') entries.push(handle);
+  async function findResources(handle, depth = 0) {
+    const results = [];
+    try {
+      for await (const [, child] of handle.entries()) {
+        if (child.kind !== 'directory') continue;
+        let hasMeta = false;
+        try { await child.getFileHandle('meta.xml'); hasMeta = true; } catch {}
+        if (hasMeta) {
+          results.push(child);
+        } else if (depth < 5) {
+          results.push(...await findResources(child, depth + 1));
+        }
+      }
+    } catch {}
+    return results;
   }
+
+  const entries = await findResources(dirHandle);
   entries.sort((a,b) => a.name.localeCompare(b.name));
   const total = entries.length;
+  if (total === 0) {
+    log('Nenhum resource encontrado (nenhum meta.xml nas subpastas).', 'err');
+    setStatus('Nenhum resource encontrado.');
+    document.getElementById('btnScan').disabled = false;
+    document.getElementById('btnScan').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> Escanear Mods';
+    scanRunning = false;
+    return;
+  }
   let done = 0;
   const startTime = Date.now();
 
@@ -569,6 +591,7 @@ async function startScan() {
     setProgress(pct);
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     setStatus(`Escaneando: ${resHandle.name} (${done}/${total}) — ${elapsed}s`);
+    log(`[${done}/${total}] ${resHandle.name}`, 'inf');
 
     let meta = { description:'', author:'', version:'?', type:'misc' };
     try {
@@ -579,11 +602,16 @@ async function startScan() {
 
     const luaList = [];
     try {
-      for await (const [fname, fh] of resHandle.entries()) {
-        if (fh.kind === 'file' && fname.endsWith('.lua')) {
-          luaList.push(parseLua(await readTextFile(fh)));
+      async function findLua(handle) {
+        for await (const [fname, fh] of handle.entries()) {
+          if (fh.kind === 'file' && fname.endsWith('.lua')) {
+            luaList.push(parseLua(await readTextFile(fh)));
+          } else if (fh.kind === 'directory') {
+            await findLua(fh);
+          }
         }
       }
+      await findLua(resHandle);
     } catch {}
 
     const { category, sellable, commands, functions, exports } = classify(resHandle.name, meta.description, luaList);

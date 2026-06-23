@@ -350,11 +350,12 @@ $bScan.Add_Click({
     $bScan.Enabled=$false; $bSend.Enabled=$false; $bExp.Enabled=$false
     $lv.Items.Clear(); $global:Resources=@(); $global:Detected=@(); $prog.Value=0
 
-    $dirs = Get-ChildItem -Path $global:FolderPath -Directory -ErrorAction SilentlyContinue | Sort-Object Name
+    $dirs = Get-ChildItem -Path $global:FolderPath -Directory -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName "meta.xml") } | Sort-Object FullName
     $total = $dirs.Count
-    if ($total -eq 0) { Log "Nenhum resource encontrado." $RED; $bScan.Enabled=$true; return }
+    if ($total -eq 0) { Log "Nenhum resource encontrado (nenhum meta.xml nas subpastas)." $RED; $bScan.Enabled=$true; return }
 
-    Log "Escaneando $total resources..." $PRIMARY
+    Log "Escaneando $total resources (recursivo)..." $PRIMARY
     $done = 0
 
     foreach ($dir in $dirs) {
