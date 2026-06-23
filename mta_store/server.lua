@@ -212,7 +212,8 @@ local function pollPendingActivations()
         connectTimeout = 10000,
         readTimeout = 10000,
     }, function(response, errno)
-        if errno ~= 0 then return end
+        local errCode = type(errno) == "table" and (errno.code or 0) or (tonumber(errno) or 0)
+        if errCode ~= 0 then return end
         local data = fromJSON(response)
         if not data or not data.success or not data.activations then return end
 
@@ -335,9 +336,9 @@ addEventHandler("onResourceStart", resourceRoot, function()
         local f = fileCreate(QUEUE_FILE)
         if f then fileWrite(f, "{}"); fileClose(f) end
     end
-    log("v2.0 Iniciado! URL: " .. tostring(MTA_STORE_SITE_URL))
+    log("v3.0 Iniciado! URL: " .. tostring(MTA_STORE_SITE_URL))
     log("Comandos: /loja | /store | /shop | /storesync")
-    log("Endpoints: /mta_store/activate | /mta_store/health | /mta_store/scan")
+    log("Polling de ativações: a cada 30s")
 end)
 
 addEventHandler("onResourceStop", resourceRoot, function() log("Resource parado.") end)
