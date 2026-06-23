@@ -46,6 +46,35 @@
   /* ── Layout ── */
   .main { max-width: 1300px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
 
+  /* ── Summary Bar ── */
+  .summary-bar {
+    display: none; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; gap: 12px; flex-wrap: wrap; align-items: center;
+  }
+  .summary-bar.show { display: flex; }
+  .summary-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+    border-radius: 20px; font-size: 13px; font-weight: 600; border: 1px solid;
+  }
+  .summary-chip.all   { background: var(--primary-dim); color: var(--primary); border-color: rgba(99,102,241,.25); }
+  .summary-chip.vip   { background: var(--amber-dim); color: var(--amber); border-color: rgba(251,191,36,.2); }
+  .summary-chip.vehicle { background: rgba(59,130,246,.1); color: #3b82f6; border-color: rgba(59,130,246,.2); }
+  .summary-chip.coins { background: var(--green-dim); color: var(--green); border-color: rgba(34,197,94,.2); }
+  .summary-chip.weapon { background: var(--red-dim); color: var(--red); border-color: rgba(239,68,68,.2); }
+  .summary-chip.house { background: rgba(249,115,22,.1); color: #f97316; border-color: rgba(249,115,22,.2); }
+  .summary-chip.job   { background: rgba(20,184,166,.1); color: var(--teal); border-color: rgba(20,184,166,.2); }
+  .summary-chip.other { background: rgba(100,116,139,.1); color: var(--muted); border-color: rgba(100,116,139,.2); }
+  .summary-chip .num { font-size: 16px; }
+  .summary-items {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; max-width: 500px;
+  }
+  .summary-item {
+    padding: 4px 10px; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 11px; color: var(--text); white-space: nowrap;
+    max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .summary-item .cat { color: var(--primary); font-weight: 600; margin-right: 4px; }
+
   /* ── Cards ── */
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .2s, box-shadow .2s; }
   .card:hover { border-color: var(--border-hover); }
@@ -218,6 +247,17 @@
     Seu navegador nao suporta leitura de pastas locais. Use <strong>Google Chrome</strong> ou <strong>Microsoft Edge</strong>.
   </div>
   <div class="alert error" id="alertError" style="display:none"></div>
+
+  <div class="summary-bar" id="summaryBar">
+    <div class="summary-chip all"><span class="num" id="sumTotal">0</span> Resources</div>
+    <div class="summary-chip vip" id="sumVipWrap" style="display:none"><span class="num" id="sumVip">0</span> VIP</div>
+    <div class="summary-chip vehicle" id="sumVehicleWrap" style="display:none"><span class="num" id="sumVehicle">0</span> Veiculos</div>
+    <div class="summary-chip coins" id="sumCoinsWrap" style="display:none"><span class="num" id="sumCoins">0</span> Moedas</div>
+    <div class="summary-chip weapon" id="sumWeaponWrap" style="display:none"><span class="num" id="sumWeapon">0</span> Armas</div>
+    <div class="summary-chip house" id="sumHouseWrap" style="display:none"><span class="num" id="sumHouse">0</span> Casas</div>
+    <div class="summary-chip job" id="sumJobWrap" style="display:none"><span class="num" id="sumJob">0</span> Empregos</div>
+    <div class="summary-items" id="sumItems"></div>
+  </div>
 
   <div class="card fade-in">
     <div class="card-header"><span class="dot"></span>Configuracao</div>
@@ -636,6 +676,7 @@ async function startScan() {
 
   renderTable();
   renderStats();
+  updateSummary();
   setProgress(100);
 
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -682,6 +723,45 @@ function renderStats() {
   document.getElementById('stCoins').textContent   = detected.filter(i=>i.category==='coins').length;
   document.getElementById('stWeapons').textContent = detected.filter(i=>i.category==='item'||i.category==='other').length;
   document.getElementById('statsRow').style.display = 'grid';
+}
+
+function updateSummary() {
+  const bar = document.getElementById('summaryBar');
+  if (!detected.length) { bar.classList.remove('show'); return; }
+
+  const counts = {};
+  detected.forEach(d => { counts[d.category] = (counts[d.category]||0) + 1; });
+
+  document.getElementById('sumTotal').textContent = resources.length;
+
+  const cats = ['vip','vehicle','coins','weapon','house','job'];
+  const ids  = ['sumVip','sumVehicle','sumCoins','sumWeapon','sumHouse','sumJob'];
+  const wraps = ['sumVipWrap','sumVehicleWrap','sumCoinsWrap','sumWeaponWrap','sumHouseWrap','sumJobWrap'];
+  cats.forEach((c, i) => {
+    const n = counts[c] || 0;
+    document.getElementById(ids[i]).textContent = n;
+    document.getElementById(wraps[i]).style.display = n > 0 ? 'inline-flex' : 'none';
+  });
+
+  const itemsEl = document.getElementById('sumItems');
+  itemsEl.innerHTML = '';
+  const shown = detected.slice(0, 8);
+  shown.forEach(d => {
+    const div = document.createElement('div');
+    div.className = 'summary-item';
+    div.innerHTML = `<span class="cat">${d.category.toUpperCase()}</span>${d.suggestedName}`;
+    div.title = d.suggestedName;
+    itemsEl.appendChild(div);
+  });
+  if (detected.length > 8) {
+    const more = document.createElement('div');
+    more.className = 'summary-item';
+    more.style.color = 'var(--muted)';
+    more.textContent = `+${detected.length - 8} mais`;
+    itemsEl.appendChild(more);
+  }
+
+  bar.classList.add('show');
 }
 
 async function sendToSite() {
