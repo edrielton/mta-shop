@@ -35,6 +35,17 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// CORS para o Scanner App (HTML aberto localmente)
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Token");
+  if (_req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
