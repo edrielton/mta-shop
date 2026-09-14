@@ -3,30 +3,65 @@ node_modules/
 
 # Build
 dist/
+build/
+out/
 
-# Ambiente (NUNCA suba isso!)
+# Ambiente (NUNCA suba com valores secretos!)
 .env
 .env.local
-.env.production
+.env.*.local
+.env.production.local
+.env.development.local
 
 # Logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
 
 # Editor
 .vscode/
 .idea/
 *.swp
-
-# Sistema
+*.swo
+*~
 .DS_Store
-Thumbs.db
+Thumbsdb
 
-# Replit (não necessário fora do Replit)
+# IDE
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Runtime
+.cache/
+.parcel-cache
+.next
+out
+
+# Replit
 .replit
 replit.nix
 .upm/
 .local/
 
-# Migrations geradas
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Migrations (geradas automaticamente)
 migrations/
